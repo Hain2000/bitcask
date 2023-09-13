@@ -89,7 +89,7 @@ func (df *File) GetLogRecord(offset int64) (*LogRecord, int64, error) {
 		logRecord.Key = kvBuf[:ks]
 		logRecord.Value = kvBuf[vs:]
 	}
-
+	//
 	crc := getLogRecordCRC(logRecord, headerBuf[crc32.Size:hs])
 	if crc != header.crc {
 		return nil, 0, ErrInvalidCRC

@@ -1,6 +1,10 @@
 package data
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"fmt"
+	"hash/crc32"
+)
 
 // LogRecordPos 内存数据索引，主要描述数据在磁盘上的位置
 type LogRecordPos struct {
@@ -32,14 +36,57 @@ type LogRecordHeader struct {
 }
 
 // EncodeLogRecord 转换LogRecord为字符数组和长度
-func EncodeLogRecord(record *LogRecord) ([]byte, int64) {
-	return nil, 0
+// cyc(4) | type(1) | key_size([0, 5)) | value_size([0, 5)) | key | value
+func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
+	header := make([]byte, maxLogRecordHeaderSize)
+
+	// 第5个字节存type
+	header[4] = logRecord.Type
+	var idx = 5
+	idx += binary.PutVarint(header[idx:], int64(len(logRecord.Key)))   // (+ key_size)
+	idx += binary.PutVarint(header[idx:], int64(len(logRecord.Value))) // (+ value_size)
+	var size = idx + len(logRecord.Value) + len(logRecord.Key)
+	eBytes := make([]byte, size)
+	// 深拷贝
+	copy(eBytes[:idx], header[:idx])
+	// 搞定了头后，把kv内容拷过来
+	copy(eBytes[idx:], logRecord.Key)
+	copy(eBytes[idx+len(logRecord.Key):], logRecord.Value)
+	// 进行crc校验
+	crc := crc32.ChecksumIEEE(eBytes[4:])          //
+	binary.LittleEndian.PutUint32(eBytes[:4], crc) // 小端序
+
+	fmt.Printf("header size : %d, crc : %d\n", idx, crc)
+
+	return eBytes, int64(size)
 }
 
 func decodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
-	return nil, 0
+	if len(buf) <= 4 {
+		return nil, 0
+	}
+	header := &LogRecordHeader{
+		crc:        binary.LittleEndian.Uint32(buf[:4]),
+		recordType: buf[4],
+	}
+
+	var idx = 5
+	ks, n := binary.Varint(buf[idx:])
+	header.keySize = uint32(ks)
+	idx += n
+	vs, n := binary.Varint(buf[idx:])
+	header.valueSize = uint32(vs)
+	idx += n
+
+	return header, int64(idx)
 }
 
 func getLogRecordCRC(lr *LogRecord, header []byte) uint32 {
-	return 0
+	if lr == nil {
+		return 0
+	}
+	crc := crc32.ChecksumIEEE(header[:])
+	crc = crc32.Update(crc, crc32.IEEETable, lr.Key)
+	crc = crc32.Update(crc, crc32.IEEETable, lr.Value)
+	return crc
 }
