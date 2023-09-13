@@ -15,10 +15,10 @@ import (
 type DB struct {
 	options    Options
 	mtx        *sync.RWMutex
-	fileIds    []int                     // 文件id，只能在加载索引的时候使用，不能在其他的地方更新和使用
-	activeFile *data.DataFile            // 当前活跃文件，用于写入
-	oldFile    map[uint32]*data.DataFile // 旧的数据文件，只能用于读
-	index      index.Indexer             // 内存索引
+	fileIds    []int                 // 文件id，只能在加载索引的时候使用，不能在其他的地方更新和使用
+	activeFile *data.File            // 当前活跃文件，用于写入
+	oldFile    map[uint32]*data.File // 旧的数据文件，只能用于读
+	index      index.Indexer         // 内存索引
 }
 
 func Open(options Options) (*DB, error) {
@@ -40,7 +40,7 @@ func Open(options Options) (*DB, error) {
 	db := &DB{
 		options: options,
 		mtx:     new(sync.RWMutex),
-		oldFile: make(map[uint32]*data.DataFile),
+		oldFile: make(map[uint32]*data.File),
 		index:   index.NewIndexer(options.IndexType),
 	}
 
@@ -66,7 +66,7 @@ func (db *DB) loadDataFile() error {
 	var fileIds []int
 	// 遍历目录中的所有文件，找到所有以data结尾的文件
 	for _, entry := range dirEntries {
-		if strings.HasSuffix(entry.Name(), data.DataFileNameSuffix) {
+		if strings.HasSuffix(entry.Name(), data.FileNameSuffix) {
 			//
 			splitNames := strings.Split(entry.Name(), ".")
 			curId, err := strconv.Atoi(splitNames[0])
@@ -102,7 +102,7 @@ func (db *DB) loadIndexFromDataFiles() error {
 	}
 	for i, v := range db.fileIds {
 		var curFid = uint32(v)
-		var dataFile *data.DataFile
+		var dataFile *data.File
 		if curFid == db.activeFile.FileId {
 			dataFile = db.activeFile
 		} else {
@@ -190,7 +190,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	}
 	// 根据fid找到对于的数据文件
 
-	var dataFile *data.DataFile
+	var dataFile *data.File
 	if db.activeFile.FileId == logRecordPos.Fid {
 		dataFile = db.activeFile
 	} else {
@@ -212,6 +212,29 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	}
 
 	return logRecord.Value, nil
+}
+
+// Delete 删除key对于的值
+func (db *DB) Delete(key []byte) error {
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+
+	if pos := db.index.Get(key); pos != nil {
+		return nil
+	}
+	// 构造【已删除】元素
+	nLogRecord := &data.LogRecord{Key: key, Type: data.LogRecordDeleted}
+	_, err := db.appendLogRecord(nLogRecord)
+	if err != nil {
+		return nil
+	}
+
+	delIndexOk := db.index.Delete(key)
+	if !delIndexOk {
+		return ErrIndexUpdateFailed
+	}
+	return nil
 }
 
 // appendLogRecord 追加写数据到活跃文件中

@@ -8,4 +8,9 @@ type IOManager interface {
 	Write([]byte) (int, error)
 	Sync() error // 表示从内存缓冲区中的数据持久化到磁盘IO
 	Close() error
+	Size() (int64, error)
+}
+
+func NewIOManager(name string) (IOManager, error) {
+	return NewFileIOManager(name)
 }
