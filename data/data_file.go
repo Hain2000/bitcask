@@ -4,6 +4,8 @@ import (
 	"bitcask/fio"
 )
 
+const DataFileNameSuffix = ".data"
+
 type DataFile struct {
 	FileId    uint32
 	WriteOff  int64         // 文件写到哪个位置了
@@ -23,6 +25,6 @@ func (df *DataFile) Write(buf []byte) error {
 	return nil
 }
 
-func (df *DataFile) GetLogRecord(offset int64) (*LogRecord, error) {
-	return nil, nil
+func (df *DataFile) GetLogRecord(offset int64) (*LogRecord, int64, error) {
+	return nil, 0, nil
 }
