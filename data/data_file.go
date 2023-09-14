@@ -52,6 +52,7 @@ func (df *File) Write(buf []byte) error {
 	return nil
 }
 
+// GetLogRecord {LogRecord[], size, err}
 func (df *File) GetLogRecord(offset int64) (*LogRecord, int64, error) {
 	fileSize, err := df.IoManager.Size()
 	if err != nil {
@@ -60,7 +61,7 @@ func (df *File) GetLogRecord(offset int64) (*LogRecord, int64, error) {
 
 	var headerBytes int64 = maxLogRecordHeaderSize
 	if offset+maxLogRecordHeaderSize > fileSize {
-		headerBytes = fileSize + offset
+		headerBytes = fileSize - offset
 	}
 
 	headerBuf, err := df.readNBytes(headerBytes, offset)
@@ -87,7 +88,7 @@ func (df *File) GetLogRecord(offset int64) (*LogRecord, int64, error) {
 			return nil, 0, err
 		}
 		logRecord.Key = kvBuf[:ks]
-		logRecord.Value = kvBuf[vs:]
+		logRecord.Value = kvBuf[ks:]
 	}
 	//
 	crc := getLogRecordCRC(logRecord, headerBuf[crc32.Size:hs])

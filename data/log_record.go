@@ -36,8 +36,9 @@ type LogRecordHeader struct {
 }
 
 // EncodeLogRecord 转换LogRecord为字符数组和长度
-// cyc(4) | type(1) | key_size([0, 5)) | value_size([0, 5)) | key | value
+// {log_record[], 长度}
 func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
+	// {cyc(4) | type(1) | key_size([0, 5)) | value_size([0, 5)) | key | value}
 	header := make([]byte, maxLogRecordHeaderSize)
 
 	// 第5个字节存type
@@ -61,6 +62,7 @@ func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
 	return eBytes, int64(size)
 }
 
+// decodeLogRecordHeader {头部， 头长}
 func decodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
 	if len(buf) <= 4 {
 		return nil, 0
