@@ -79,7 +79,7 @@ func (db *DB) loadDataFile() error {
 	}
 	// 对fileIds从小到达排序
 	sort.Ints(fileIds)
-
+	db.fileIds = fileIds
 	//
 	for i, fid := range fileIds {
 		curFile, err := data.OpenDataFile(db.options.DirPath, uint32(fid))
@@ -118,7 +118,7 @@ func (db *DB) loadIndexFromDataFiles() error {
 				}
 				return err
 			}
-
+			// 构造内存索引并保存
 			logRecordPos := &data.LogRecordPos{Fid: curFid, Offset: offset}
 			if logRecord.Type == data.LogRecordDeleted {
 				db.index.Delete(logRecord.Key)
@@ -202,6 +202,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, ErrDataFileNotFound
 	}
 
+	// 根据偏移量找信息
 	logRecord, _, err := dataFile.GetLogRecord(logRecordPos.Offset)
 	if err != nil {
 		return nil, err
@@ -220,7 +221,7 @@ func (db *DB) Delete(key []byte) error {
 		return ErrKeyIsEmpty
 	}
 
-	if pos := db.index.Get(key); pos != nil {
+	if pos := db.index.Get(key); pos == nil {
 		return nil
 	}
 	// 构造【已删除】元素

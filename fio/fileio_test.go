@@ -11,6 +11,7 @@ func TestNewFileIOManager(t *testing.T) {
 	path := filepath.Join("/tmp", "yyds.data")
 	fio, err := NewFileIOManager(path)
 	defer destroyFile(path)
+	defer fio.Close()
 	assert.Nil(t, err)
 	assert.NotNil(t, fio)
 }
