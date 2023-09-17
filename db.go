@@ -190,29 +190,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	}
 	// 根据fid找到对于的数据文件
 
-	var dataFile *data.File
-	if db.activeFile.FileId == logRecordPos.Fid {
-		dataFile = db.activeFile
-	} else {
-		dataFile = db.oldFile[logRecordPos.Fid]
-	}
-
-	// 数据文件为空
-	if dataFile == nil {
-		return nil, ErrDataFileNotFound
-	}
-
-	// 根据偏移量找信息
-	logRecord, _, err := dataFile.GetLogRecord(logRecordPos.Offset)
-	if err != nil {
-		return nil, err
-	}
-
-	if logRecord.Type == data.LogRecordDeleted {
-		return nil, ErrKeyNotFound
-	}
-
-	return logRecord.Value, nil
+	return db.getValueByPosition(logRecordPos)
 }
 
 // Delete 删除key对于的值
@@ -299,4 +277,91 @@ func (db *DB) setActiveDataFile() error {
 	}
 	db.activeFile = dateFile
 	return nil
+}
+
+// getValueByPosition 获取数据文件中的Value
+func (db *DB) getValueByPosition(pos *data.LogRecordPos) ([]byte, error) {
+	var dataFile *data.File
+	if db.activeFile.FileId == pos.Fid {
+		dataFile = db.activeFile
+	} else {
+		dataFile = db.oldFile[pos.Fid]
+	}
+
+	// 数据文件为空
+	if dataFile == nil {
+		return nil, ErrDataFileNotFound
+	}
+
+	// 根据偏移量找信息
+	logRecord, _, err := dataFile.GetLogRecord(pos.Offset)
+	if err != nil {
+		return nil, err
+	}
+
+	if logRecord.Type == data.LogRecordDeleted {
+		return nil, ErrKeyNotFound
+	}
+
+	return logRecord.Value, nil
+}
+
+// CurListKeys 获取所有的key
+func (db *DB) CurListKeys() [][]byte {
+	iterator := db.index.Iterator(false)
+	keys := make([][]byte, db.index.Size())
+	var idx int
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		keys[idx] = iterator.Key()
+		idx++
+	}
+	return keys
+}
+
+// Fold 获取所有数据并非用户指定的数据
+func (db *DB) Fold(f func(key []byte, value []byte) bool) error {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+
+	iterator := db.index.Iterator(false)
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		value, err := db.getValueByPosition(iterator.Value())
+		if err != nil {
+			return err
+		}
+		if !f(iterator.Key(), value) {
+			break
+		}
+	}
+	return nil
+}
+
+// Close 关闭数据库
+func (db *DB) Close() error {
+	if db.activeFile == nil {
+		return nil
+	}
+	db.mtx.Lock()
+	defer db.mtx.Unlock()
+
+	if err := db.activeFile.Close(); err != nil {
+		return err
+	}
+
+	for _, file := range db.oldFile {
+		if err := file.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Sync 持久化数据文件
+func (db *DB) Sync() error {
+	if db.activeFile == nil {
+		return nil
+	}
+	db.mtx.Lock()
+	defer db.mtx.Unlock()
+	return db.activeFile.Sync()
 }

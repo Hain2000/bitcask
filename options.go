@@ -22,3 +22,14 @@ var DefaultOptions = Options{
 	SyncWrite:    false,
 	IndexType:    BTREE,
 }
+
+// IteratorOptions 迭代器设置
+type IteratorOptions struct {
+	Prefix  []byte // 遍历前缀指定的Key，默认为空
+	Reverse bool   // 是否反向，默认false(正向)
+}
+
+var DefaultIteratorOptions = IteratorOptions{
+	Prefix:  nil,
+	Reverse: false,
+}

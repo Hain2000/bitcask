@@ -13,7 +13,7 @@ var (
 
 // GetTestKey 获取测试使用的 key
 func GetTestKey(i int) []byte {
-	return []byte(fmt.Sprintf("bitcask-go-key-%09d", i))
+	return []byte(fmt.Sprintf("bitcask-key-%09d", i))
 }
 
 // RandomValue 生成随机 value，用于测试
@@ -22,5 +22,5 @@ func RandomValue(n int) []byte {
 	for i := range b {
 		b[i] = letters[randStr.Intn(len(letters))]
 	}
-	return []byte("bitcask" + string(b))
+	return []byte("bitcask-value-" + string(b))
 }
