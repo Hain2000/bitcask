@@ -12,6 +12,7 @@ type Indexer interface {
 	Delete(key []byte) bool                      //
 	Iterator(reverse bool) Iterator
 	Size() int // 索引中数据个数
+	Close() error
 }
 
 type Item struct {
@@ -31,15 +32,19 @@ const (
 
 	// ART 自适应基数索引
 	ART
+
+	// BPLUSTREE B+树索引
+	BPLUSTREE
 )
 
-func NewIndexer(ty IdxType) Indexer {
+func NewIndexer(ty IdxType, dirPath string, sync bool) Indexer {
 	switch ty {
 	case BTREE:
 		return NewBTree()
 	case ART:
-		// TODO
-		return nil
+		return NewART()
+	case BPLUSTREE:
+		return NewBPlusTree(dirPath, sync)
 	default:
 		panic("unsupported index type")
 	}

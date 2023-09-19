@@ -14,13 +14,14 @@ type IdxType = int8
 const (
 	BTREE IdxType = iota + 1
 	ART
+	BPLUSTREE
 )
 
 var DefaultOptions = Options{
 	DirPath:      os.TempDir(),
 	DataFileSize: 256 * 1024 * 1024, // 256MB
 	SyncWrite:    false,
-	IndexType:    BTREE,
+	IndexType:    BPLUSTREE,
 }
 
 // IteratorOptions 迭代器设置
