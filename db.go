@@ -4,6 +4,8 @@ import (
 	"bitcask/data"
 	"bitcask/index"
 	"errors"
+	"fmt"
+	"github.com/gofrs/flock"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,9 +26,13 @@ type DB struct {
 	isMerging       bool                  // 是否有Merge进行
 	seqNoFileExists bool                  // 存储事务序列号是否存在
 	isInitial       bool                  // 是否第一次初始化数据目录
+	fileLock        *flock.Flock          // 文件锁，多进程之间互斥
 }
 
-const seqNoKey = "seq.no"
+const (
+	seqNoKey     = "seq.no"
+	fileLockName = "flock"
+)
 
 func Open(options Options) (*DB, error) {
 	// 检查用户配置
@@ -43,6 +49,16 @@ func Open(options Options) (*DB, error) {
 		}
 
 	}
+	// 文件锁
+	fileLock := flock.New(filepath.Join(options.DirPath, fileLockName))
+	hold, err := fileLock.TryLock()
+	if err != nil {
+		return nil, err
+	}
+	if !hold {
+		return nil, ErrDatabaseIsUsing
+	}
+
 	entries, err := os.ReadDir(options.DirPath)
 	if err != nil {
 		return nil, err
@@ -57,6 +73,7 @@ func Open(options Options) (*DB, error) {
 		oldFile:   make(map[uint32]*data.File),
 		index:     index.NewIndexer(options.IndexType, options.DirPath, options.SyncWrite),
 		isInitial: isInitial,
+		fileLock:  fileLock,
 	}
 
 	// 加载merge数据目录
@@ -444,17 +461,23 @@ func (db *DB) Fold(f func(key []byte, value []byte) bool) error {
 
 // Close 关闭数据库
 func (db *DB) Close() error {
+	defer func() {
+		if err := db.fileLock.Unlock(); err != nil {
+			panic(fmt.Sprintf("failed to unlock the directory, %v", err))
+		}
+	}()
+	// 关闭索引
+	if err := db.index.Close(); err != nil {
+		return err
+	}
 	if db.activeFile == nil {
 		return nil
 	}
 	db.mtx.Lock()
 	defer db.mtx.Unlock()
-	// 关闭索引
-	if err := db.index.Close(); err != nil {
-		return err
-	}
 	// 保存当前事务序列号
 	seqNoFile, err := data.OpenSeqNoFile(db.options.DirPath)
+	defer seqNoFile.Close()
 	if err != nil {
 		return err
 	}
@@ -504,11 +527,17 @@ func (db *DB) loadSeqNo() error {
 		return err
 	}
 	record, _, err := seqNoFile.GetLogRecord(0)
+	if err != nil {
+		return err
+	}
 	seqNo, err := strconv.ParseUint(string(record.Value), 10, 64)
 	if err != nil {
 		return err
 	}
 	db.seqNo = seqNo
 	db.seqNoFileExists = true
-	return nil
+	if err := seqNoFile.Close(); err != nil {
+		return err
+	}
+	return os.Remove(fileName)
 }

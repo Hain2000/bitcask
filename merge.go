@@ -149,9 +149,8 @@ func (db *DB) Merge() error {
 }
 
 func (db *DB) getMergePath() string {
-	dir := path.Dir(path.Clean(db.options.DirPath)) // path.Clean 可以删除多余路径分隔符“/”
-	base := path.Base(db.options.DirPath)           // 拿到路径后一个元素
-	return filepath.Join(dir, base+mergeDirName)    // 元素之间添加路径分隔符“/”
+	base := path.Base(db.options.DirPath) // 拿到路径后一个元素
+	return base + mergeDirName
 }
 
 func (db *DB) loadMergeFiles() error {
@@ -179,7 +178,7 @@ func (db *DB) loadMergeFiles() error {
 		if entry.Name() == data.SeqNoFileName {
 			continue
 		}
-		
+
 		mergeFileNames = append(mergeFileNames, entry.Name())
 	}
 

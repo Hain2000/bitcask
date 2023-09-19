@@ -3,6 +3,7 @@ module bitcask
 go 1.21.0
 
 require (
+	github.com/gofrs/flock v0.8.1
 	github.com/google/btree v1.1.2
 	github.com/plar/go-adaptive-radix-tree v1.0.5
 	github.com/stretchr/testify v1.8.4
