@@ -27,13 +27,13 @@ type File struct {
 }
 
 // OpenDataFile 打开新的数据文件
-func OpenDataFile(dirPath string, fileId uint32) (*File, error) {
+func OpenDataFile(dirPath string, fileId uint32, ioType fio.FileIOType) (*File, error) {
 	fileName := GetDataFileName(dirPath, fileId)
-	return newDataFile(fileName, fileId)
+	return newDataFile(fileName, fileId, ioType)
 }
 
-func newDataFile(fileName string, fileId uint32) (*File, error) {
-	nIOM, err := fio.NewIOManager(fileName)
+func newDataFile(fileName string, fileId uint32, ioType fio.FileIOType) (*File, error) {
+	nIOM, err := fio.NewIOManager(fileName, ioType)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func newDataFile(fileName string, fileId uint32) (*File, error) {
 
 func OpenHintFile(dirPath string) (*File, error) {
 	fileName := filepath.Join(dirPath, HintFileName)
-	return newDataFile(fileName, 0)
+	return newDataFile(fileName, 0, fio.StanderFIO)
 }
 
 func GetDataFileName(dirPath string, fileId uint32) string {
@@ -56,12 +56,12 @@ func GetDataFileName(dirPath string, fileId uint32) string {
 // OpenSeqNoFile 存储事务序列号的文件
 func OpenSeqNoFile(dirPath string) (*File, error) {
 	fileName := filepath.Join(dirPath, SeqNoFileName)
-	return newDataFile(fileName, 0)
+	return newDataFile(fileName, 0, fio.StanderFIO)
 }
 
 func OpenMergeFinishedFile(dirPath string) (*File, error) {
 	fileName := filepath.Join(dirPath, FinishedFileName)
-	return newDataFile(fileName, 0)
+	return newDataFile(fileName, 0, fio.StanderFIO)
 }
 
 func (df *File) Sync() error {
@@ -141,4 +141,16 @@ func (df *File) WriteHintRecord(key []byte, pos *LogRecordPos) error {
 	}
 	encRecord, _ := EncodeLogRecord(record)
 	return df.Write(encRecord)
+}
+
+func (df *File) SetIOManager(dirPath string, ioType fio.FileIOType) error {
+	if err := df.IoManager.Close(); err != nil {
+		return err
+	}
+	ioM, err := fio.NewIOManager(GetDataFileName(dirPath, df.FileId), ioType)
+	if err != nil {
+		return err
+	}
+	df.IoManager = ioM
+	return err
 }

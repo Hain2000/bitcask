@@ -2,6 +2,13 @@ package fio
 
 const DataFilePerm = 0644
 
+type FileIOType = byte
+
+const (
+	StanderFIO FileIOType = iota
+	MemoryMap
+)
+
 // IOManager 抽象IO管理器接口
 type IOManager interface {
 	Read([]byte, int64) (int, error)
@@ -11,6 +18,13 @@ type IOManager interface {
 	Size() (int64, error)
 }
 
-func NewIOManager(name string) (IOManager, error) {
-	return NewFileIOManager(name)
+func NewIOManager(name string, ioType FileIOType) (IOManager, error) {
+	switch ioType {
+	case MemoryMap:
+		return NewMMapIOManager(name)
+	case StanderFIO:
+		return NewFileIOManager(name)
+	default:
+		panic("unsupported io type")
+	}
 }

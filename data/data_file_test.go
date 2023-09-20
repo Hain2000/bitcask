@@ -1,25 +1,26 @@
 package data
 
 import (
+	"bitcask/fio"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
 )
 
 func TestOpenDataFile(t *testing.T) {
-	dataFile1, err := OpenDataFile(os.TempDir(), 0)
+	dataFile1, err := OpenDataFile(os.TempDir(), 0, fio.StanderFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile1)
-	dataFile2, err := OpenDataFile(os.TempDir(), 191)
+	dataFile2, err := OpenDataFile(os.TempDir(), 191, fio.StanderFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile2)
-	dataFile3, err := OpenDataFile(os.TempDir(), 191)
+	dataFile3, err := OpenDataFile(os.TempDir(), 191, fio.StanderFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile3)
 }
 
 func TestFile_Write(t *testing.T) {
-	dataFile1, err := OpenDataFile(os.TempDir(), 0)
+	dataFile1, err := OpenDataFile(os.TempDir(), 0, fio.StanderFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile1)
 	err = dataFile1.Write([]byte("lcyyyds"))
@@ -29,7 +30,7 @@ func TestFile_Write(t *testing.T) {
 }
 
 func TestFile_Close(t *testing.T) {
-	dataFile1, err := OpenDataFile(os.TempDir(), 0)
+	dataFile1, err := OpenDataFile(os.TempDir(), 0, fio.StanderFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile1)
 	err = dataFile1.Write([]byte("lcyyyds"))
@@ -40,7 +41,7 @@ func TestFile_Close(t *testing.T) {
 }
 
 func TestFile_Sync(t *testing.T) {
-	dataFile1, err := OpenDataFile(os.TempDir(), 500)
+	dataFile1, err := OpenDataFile(os.TempDir(), 500, fio.StanderFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile1)
 	err = dataFile1.Write([]byte("lcyyyds"))
@@ -51,7 +52,7 @@ func TestFile_Sync(t *testing.T) {
 }
 
 func TestFile_GetLogRecord(t *testing.T) {
-	dataFile, err := OpenDataFile(os.TempDir(), 900)
+	dataFile, err := OpenDataFile(os.TempDir(), 900, fio.StanderFIO)
 	assert.Nil(t, err)
 	assert.NotNil(t, dataFile)
 

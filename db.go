@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"bitcask/data"
+	"bitcask/fio"
 	"bitcask/index"
 	"errors"
 	"fmt"
@@ -27,6 +28,7 @@ type DB struct {
 	seqNoFileExists bool                  // 存储事务序列号是否存在
 	isInitial       bool                  // 是否第一次初始化数据目录
 	fileLock        *flock.Flock          // 文件锁，多进程之间互斥
+	bytesWrite      uint                  // 当前写了多少字节
 }
 
 const (
@@ -96,6 +98,13 @@ func Open(options Options) (*DB, error) {
 		if err := db.loadIndexFromDataFiles(); err != nil {
 			return nil, err
 		}
+
+		// 重置IO类型为标准型
+		if db.options.MMapAtStartup {
+			if err := db.resetIOType(); err != nil {
+				return nil, err
+			}
+		}
 	}
 	// 取出当前事务索引号
 	if options.IndexType == BPLUSTREE {
@@ -137,9 +146,13 @@ func (db *DB) loadDataFile() error {
 	// 对fileIds从小到达排序
 	sort.Ints(fileIds)
 	db.fileIds = fileIds
-	//
+
+	ioType := fio.StanderFIO
+	if db.options.MMapAtStartup && db.options.IndexType != BPLUSTREE {
+		ioType = fio.MemoryMap
+	}
 	for i, fid := range fileIds {
-		curFile, err := data.OpenDataFile(db.options.DirPath, uint32(fid))
+		curFile, err := data.OpenDataFile(db.options.DirPath, uint32(fid), ioType)
 		if err != nil {
 			return err
 		}
@@ -372,10 +385,18 @@ func (db *DB) appendLogRecord(logRecord *data.LogRecord) (*data.LogRecordPos, er
 		return nil, err
 	}
 
+	db.bytesWrite += uint(size)
 	// 根据用户配置是否需要持久化
-	if db.options.SyncWrite {
+	var needSync = db.options.SyncWrite
+	if !needSync && db.options.BytesPerSync > 0 && db.bytesWrite >= db.options.BytesPerSync {
+		needSync = true
+	}
+	if needSync {
 		if err := db.activeFile.Sync(); err != nil {
 			return nil, err
+		}
+		if db.bytesWrite > 0 {
+			db.bytesWrite = 0
 		}
 	}
 
@@ -392,7 +413,7 @@ func (db *DB) setActiveDataFile() error {
 	}
 
 	// 打开新的数据文件
-	dateFile, err := data.OpenDataFile(db.options.DirPath, initialFileId)
+	dateFile, err := data.OpenDataFile(db.options.DirPath, initialFileId, fio.StanderFIO)
 	if err != nil {
 		return err
 	}
@@ -466,15 +487,17 @@ func (db *DB) Close() error {
 			panic(fmt.Sprintf("failed to unlock the directory, %v", err))
 		}
 	}()
+	db.mtx.Lock()
+	defer db.mtx.Unlock()
 	// 关闭索引
 	if err := db.index.Close(); err != nil {
 		return err
 	}
+
 	if db.activeFile == nil {
 		return nil
 	}
-	db.mtx.Lock()
-	defer db.mtx.Unlock()
+
 	// 保存当前事务序列号
 	seqNoFile, err := data.OpenSeqNoFile(db.options.DirPath)
 	defer seqNoFile.Close()
@@ -536,8 +559,20 @@ func (db *DB) loadSeqNo() error {
 	}
 	db.seqNo = seqNo
 	db.seqNoFileExists = true
-	if err := seqNoFile.Close(); err != nil {
+	return nil
+}
+
+func (db *DB) resetIOType() error {
+	if db.activeFile == nil {
+		return nil
+	}
+	if err := db.activeFile.SetIOManager(db.options.DirPath, fio.StanderFIO); err != nil {
 		return err
 	}
-	return os.Remove(fileName)
+	for _, file := range db.oldFile {
+		if err := file.SetIOManager(db.options.DirPath, fio.StanderFIO); err != nil {
+			return err
+		}
+	}
+	return nil
 }
