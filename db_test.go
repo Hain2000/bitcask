@@ -10,9 +10,7 @@ import (
 // 测试完成之后销毁 DB 数据目录
 func destroyDB(db *DB) {
 	if db != nil {
-		if db.activeFile != nil {
-			_ = db.Close()
-		}
+		_ = db.Close()
 		err := os.RemoveAll(db.options.DirPath)
 		if err != nil {
 			panic(err)
@@ -279,4 +277,32 @@ func Test_FileLock(t *testing.T) {
 	assert.Nil(t, err)
 	err = db2.Close()
 	assert.NotNil(t, err)
+}
+
+func Test_Stat(t *testing.T) {
+	opts := DefaultOptions
+	dir, _ := os.MkdirTemp("", "bitcask-stat")
+	opts.DirPath = dir
+	db, err := Open(opts)
+	defer destroyDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	for i := 0; i < 20000; i++ {
+		err := db.Put(utils.GetTestKey(i), utils.RandomValue(128))
+		assert.Nil(t, err)
+	}
+
+	for i := 0; i < 1000; i++ {
+		err := db.Delete(utils.GetTestKey(i))
+		assert.Nil(t, err)
+	}
+
+	for i := 3000; i < 10000; i++ {
+		err := db.Put(utils.GetTestKey(i), utils.RandomValue(128))
+		assert.Nil(t, err)
+	}
+
+	stat := db.Stat()
+	t.Log(stat)
 }

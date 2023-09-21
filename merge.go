@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"bitcask/data"
+	"bitcask/utils"
 	"io"
 	"os"
 	"path"
@@ -27,6 +28,29 @@ func (db *DB) Merge() error {
 		return ErrMerageIsProgress
 	}
 
+	// 查看是否达到merge阈值
+	totalSize, err := utils.DirSize(db.options.DirPath)
+	if err != nil {
+		db.mtx.Unlock()
+		return err
+	}
+
+	if float32(db.reclaimSize)/float32(totalSize) < db.options.DataFileMergeRatio {
+		db.mtx.Unlock()
+		return ErrMergeRatioUnreached
+	}
+
+	// 查看剩余空间是否开源merge
+	availableDisk, err := utils.AvailableDiskSize()
+	if err != nil {
+		db.mtx.Unlock()
+		return err
+	}
+	if uint64(totalSize-db.reclaimSize) >= availableDisk {
+		db.mtx.Unlock()
+		return ErrNoEnoughSpaceForMerge
+	}
+
 	db.isMerging = true
 	defer func() {
 		db.isMerging = false
@@ -43,7 +67,7 @@ func (db *DB) Merge() error {
 
 	if err := db.setActiveDataFile(); err != nil {
 		db.mtx.Unlock()
-		return nil
+		return err
 	}
 
 	noMergeFileId := db.activeFile.FileId
@@ -168,7 +192,7 @@ func (db *DB) loadMergeFiles() error {
 	}
 
 	// 查找标识merge完成的文件，判断merge是否完成
-	var isFinished bool = false
+	var isFinished bool
 	var mergeFileNames []string
 	for _, entry := range dirEntries {
 		if entry.Name() == data.FinishedFileName {
@@ -176,6 +200,10 @@ func (db *DB) loadMergeFiles() error {
 		}
 
 		if entry.Name() == data.SeqNoFileName {
+			continue
+		}
+
+		if entry.Name() == fileLockName {
 			continue
 		}
 
@@ -194,7 +222,7 @@ func (db *DB) loadMergeFiles() error {
 	// 删掉旧数据文件
 	var fileId uint32 = 0
 	for ; fileId < nonMergeFileId; fileId++ {
-		name := data.GetDataFileName(mergePath, fileId)
+		name := data.GetDataFileName(db.options.DirPath, fileId)
 		if _, err := os.Stat(name); err != nil {
 			if err := os.Remove(name); err != nil {
 				return err
@@ -238,7 +266,7 @@ func (db *DB) loadIndexFromHintFile() error {
 		return nil
 	}
 
-	hitFile, err := data.OpenHintFile(hintFileName)
+	hitFile, err := data.OpenHintFile(db.options.DirPath)
 	if err != nil {
 		return err
 	}

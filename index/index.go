@@ -7,9 +7,9 @@ import (
 )
 
 type Indexer interface {
-	Put(key []byte, pos *data.LogRecordPos) bool //
-	Get(key []byte) *data.LogRecordPos           //
-	Delete(key []byte) bool                      //
+	Put(key []byte, pos *data.LogRecordPos) *data.LogRecordPos
+	Get(key []byte) *data.LogRecordPos
+	Delete(key []byte) (*data.LogRecordPos, bool)
 	Iterator(reverse bool) Iterator
 	Size() int // 索引中数据个数
 	Close() error

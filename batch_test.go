@@ -84,14 +84,14 @@ func TestDB_WriteBatch3(t *testing.T) {
 	dir := "/tmp/bitcaskdata"
 	opts.DirPath = dir
 	db, err := Open(opts)
-	// defer destroyDB(db)
+	defer destroyDB(db)
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
 
 	wbOpts := DefaultWriteBatchOptions
-	wbOpts.MaxBatchNum = 2000000
+	wbOpts.MaxBatchNum = 200000
 	wb := db.NewWriteBatch(wbOpts)
-	for i := 0; i < 1145140; i++ {
+	for i := 0; i < 114514; i++ {
 		err = wb.Put(utils.GetTestKey(i), utils.RandomValue(1024))
 		assert.Nil(t, err)
 	}

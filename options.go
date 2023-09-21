@@ -3,12 +3,13 @@ package bitcask
 import "os"
 
 type Options struct {
-	DirPath       string // 数据库数据目录
-	DataFileSize  int64  // 数据文件的大小
-	SyncWrite     bool   // 每次写是否需要持久化
-	IndexType     IdxType
-	BytesPerSync  uint // 累计写该阈值时，进行持久化
-	MMapAtStartup bool // 启动MMap
+	DirPath            string // 数据库数据目录
+	DataFileSize       int64  // 数据文件的大小
+	SyncWrite          bool   // 每次写是否需要持久化
+	IndexType          IdxType
+	BytesPerSync       uint // 累计写该阈值时，进行持久化
+	MMapAtStartup      bool // 启动MMap
+	DataFileMergeRatio float32
 }
 
 type IdxType = int8
@@ -20,12 +21,13 @@ const (
 )
 
 var DefaultOptions = Options{
-	DirPath:       os.TempDir(),
-	DataFileSize:  256 * 1024 * 1024, // 256MB
-	SyncWrite:     false,
-	BytesPerSync:  0,
-	IndexType:     BPLUSTREE,
-	MMapAtStartup: true,
+	DirPath:            os.TempDir(),
+	DataFileSize:       256 * 1024 * 1024, // 256MB
+	SyncWrite:          false,
+	BytesPerSync:       0,
+	IndexType:          ART,
+	MMapAtStartup:      true,
+	DataFileMergeRatio: 0.5,
 }
 
 // IteratorOptions 迭代器设置
