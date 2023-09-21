@@ -614,3 +614,10 @@ func (db *DB) Stat() *Stat {
 		DiskSize:        diskSize,
 	}
 }
+
+// Backup 备份数据库，将数据文件拷贝到新目录中
+func (db *DB) Backup(dir string) error {
+	db.mtx.Lock()
+	defer db.mtx.Unlock()
+	return utils.CopyDir(db.options.DirPath, dir, []string{fileLockName})
+}
