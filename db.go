@@ -518,7 +518,9 @@ func (db *DB) Close() error {
 
 	// 保存当前事务序列号
 	seqNoFile, err := data.OpenSeqNoFile(db.options.DirPath)
-	defer seqNoFile.Close()
+	defer func(seqNoFile *data.File) {
+		_ = seqNoFile.Close()
+	}(seqNoFile)
 	if err != nil {
 		return err
 	}
