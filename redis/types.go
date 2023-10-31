@@ -71,6 +71,10 @@ func (rds *DataStructure) findMetaData(key []byte, dataType redisType) (*metadat
 	return meta, nil
 }
 
+func (rds *DataStructure) Close() error {
+	return rds.db.Close()
+}
+
 // String -----------------------------------------------------------
 
 func (rds *DataStructure) Set(key []byte, ttl time.Duration, value []byte) error {
