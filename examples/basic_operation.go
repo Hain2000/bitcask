@@ -2,10 +2,11 @@ package main
 
 import (
 	"bitcask"
+	"bitcask/raft"
 	"fmt"
 )
 
-func main() {
+func Basic() {
 	opts := bitcask.DefaultOptions
 	opts.DirPath = "/tmp/bitcaskdata"
 	database, err := bitcask.Open(opts)
@@ -36,4 +37,8 @@ func main() {
 	} else {
 		fmt.Println("val2 =", string(val2))
 	}
+}
+
+func main() {
+	raft.PrintDebugLog("YYDS 12312321")
 }
