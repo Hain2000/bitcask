@@ -2,7 +2,6 @@ package main
 
 import (
 	"bitcask"
-	"bitcask/raft"
 	"fmt"
 )
 
@@ -40,5 +39,5 @@ func Basic() {
 }
 
 func main() {
-	raft.PrintDebugLog("YYDS 12312321")
+
 }
