@@ -2,149 +2,318 @@ package bitcask
 
 import (
 	"bitcask/data"
-	"encoding/binary"
+	"bitcask/utils"
+	"bytes"
+	"fmt"
+	"github.com/bwmarrin/snowflake"
+	"github.com/valyala/bytebufferpool"
 	"sync"
-	"sync/atomic"
 )
 
-const nonTransactionSqeNo uint64 = 0
-
-var txnFinKey = []byte("txn-fin")
-
-type WriteBatch struct {
-	options       WriteBatchOptions
-	mtx           *sync.Mutex
-	db            *DB
-	pendingWrites map[string]*data.LogRecord
+type Batch struct {
+	options          BatchOptions
+	mtx              sync.RWMutex
+	db               *DB
+	pendingWrites    []*data.LogRecord
+	pendingWritesMap map[uint64][]int // map[uint64][]int比用map[string][]int节省内存：1.uint64只占8字节 2.[]byte转string会有额外内存开销 3.查找遍历整个字符串并逐字节比较，速度慢
+	committed        bool
+	rollbacked       bool
+	batchId          *snowflake.Node
+	buffers          []*bytebufferpool.ByteBuffer
 }
 
-func (db *DB) NewWriteBatch(opts WriteBatchOptions) *WriteBatch {
-	if db.options.IndexType == BPLUSTREE && !db.seqNoFileExists && !db.isInitial {
-		panic("cannot use write batch, seq no file not exists")
+func (db *DB) NewBatch(opts BatchOptions) *Batch {
+	batch := &Batch{
+		options:    opts,
+		db:         db,
+		committed:  false,
+		rollbacked: false,
 	}
-	return &WriteBatch{
-		options:       opts,
-		mtx:           new(sync.Mutex),
-		db:            db,
-		pendingWrites: make(map[string]*data.LogRecord),
-	}
-}
-
-func (wb *WriteBatch) Put(key []byte, value []byte) error {
-	if len(key) == 0 {
-		return ErrKeyIsEmpty
-	}
-	wb.mtx.Lock()
-	defer wb.mtx.Unlock()
-	logRecord := &data.LogRecord{Key: key, Value: value}
-	wb.pendingWrites[string(key)] = logRecord
-	return nil
-}
-
-func (wb *WriteBatch) Delete(key []byte) error {
-	if len(key) == 0 {
-		return ErrKeyIsEmpty
-	}
-	wb.mtx.Lock()
-	defer wb.mtx.Unlock()
-
-	// 数据不存在，则直接返回
-	logRecordPos := wb.db.index.Get(key)
-	if logRecordPos == nil {
-		if wb.pendingWrites[string(key)] != nil {
-			delete(wb.pendingWrites, string(key))
+	if !opts.ReadOnly {
+		node, err := snowflake.NewNode(1)
+		if err != nil {
+			panic(fmt.Sprintf("snowflake.NewNode(1) failed: %v", err))
 		}
-		return nil
+		batch.batchId = node
+	}
+	batch.lock()
+	return batch
+}
+
+func newBatch() interface{} {
+	node, err := snowflake.NewNode(1)
+	if err != nil {
+		panic(fmt.Sprintf("snowflake.NewNode(1) failed: %v", err))
+	}
+	return &Batch{
+		options: DefaultBatchOptions,
+		batchId: node,
+	}
+}
+
+func newRecord() interface{} {
+	return &data.LogRecord{}
+}
+
+func (b *Batch) init(rdonly, sync bool, db *DB) {
+	b.options.ReadOnly = rdonly
+	b.options.Sync = sync
+	b.db = db
+	b.lock()
+}
+
+func (b *Batch) lock() {
+	if b.options.ReadOnly {
+		b.db.mtx.RLock()
+	} else {
+		b.db.mtx.Lock()
+	}
+}
+
+func (b *Batch) unlock() {
+	if b.options.ReadOnly {
+		b.db.mtx.RUnlock()
+	} else {
+		b.db.mtx.Unlock()
+	}
+}
+
+func (b *Batch) reset() {
+	b.db = nil
+	b.pendingWritesMap = nil
+	b.pendingWrites = b.pendingWrites[:0]
+	b.committed = false
+	b.rollbacked = false
+	for _, buf := range b.buffers {
+		bytebufferpool.Put(buf)
+	}
+	b.buffers = b.buffers[:0]
+}
+
+func (b *Batch) Put(key []byte, value []byte) error {
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+	if b.db.closed {
+		return ErrDBClosed
+	}
+	if b.options.ReadOnly {
+		return ErrReadOnlyBatch
 	}
 
-	// 暂存logRecord
-	logRecord := &data.LogRecord{Key: key, Type: data.LogRecordDeleted}
-	wb.pendingWrites[string(key)] = logRecord
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	record := b.lookupPendingWrites(key)
+	if record == nil {
+		record = b.db.recordPool.Get().(*data.LogRecord)
+		b.appendPendingWrites(key, record)
+	}
+	record.Key, record.Value = key, value
+	record.Type, record.Expire = data.LogRecordNormal, 0
 	return nil
+}
+
+func (b *Batch) Get(key []byte) ([]byte, error) {
+	if len(key) == 0 {
+		return nil, ErrKeyIsEmpty
+	}
+	if b.db.closed {
+		return nil, ErrDBClosed
+	}
+	b.mtx.RLock()
+	record := b.lookupPendingWrites(key)
+	b.mtx.RUnlock()
+	if record != nil {
+		if record.Type == data.LogRecordDeleted {
+			return nil, ErrKeyNotFound
+		}
+		return record.Value, nil
+	}
+
+	chunkPosition := b.db.index.Get(key)
+	if chunkPosition == nil {
+		return nil, ErrKeyNotFound
+	}
+	chunk, err := b.db.dataFiles.Read(chunkPosition)
+	if err != nil {
+		return nil, err
+	}
+	record = data.DecodeLogRecord(chunk)
+	if record.Type == data.LogRecordDeleted {
+		panic("Deleted data cannot exist in the index")
+	}
+	return record.Value, nil
+}
+
+func (b *Batch) Delete(key []byte) error {
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+	if b.db.closed {
+		return ErrDBClosed
+	}
+	if b.options.ReadOnly {
+		return ErrReadOnlyBatch
+	}
+	b.mtx.Lock()
+	var exist bool
+	record := b.lookupPendingWrites(key)
+	if record != nil {
+		record.Type = data.LogRecordDeleted
+		record.Value = nil
+		record.Expire = 0
+		exist = true
+	}
+	if !exist {
+		record = &data.LogRecord{
+			Key:  key,
+			Type: data.LogRecordDeleted,
+		}
+		b.appendPendingWrites(key, record)
+	}
+	b.mtx.Unlock()
+	return nil
+}
+
+func (b *Batch) Exist(key []byte) (bool, error) {
+	if len(key) == 0 {
+		return false, ErrKeyIsEmpty
+	}
+	if b.db.closed {
+		return false, ErrDBClosed
+	}
+	b.mtx.RLock()
+	record := b.lookupPendingWrites(key)
+	b.mtx.RUnlock()
+	if record != nil {
+		return record.Type != data.LogRecordDeleted, nil
+	}
+	position := b.db.index.Get(key)
+	if position == nil {
+		return false, nil
+	}
+	chunk, err := b.db.dataFiles.Read(position)
+	if err != nil {
+		return false, err
+	}
+	record = data.DecodeLogRecord(chunk)
+	if record.Type == data.LogRecordDeleted {
+		b.db.index.Delete(key)
+		return false, nil
+	}
+	return true, nil
 }
 
 // Commit 提交事务，暂存的数据
-func (wb *WriteBatch) Commit() error {
-	wb.mtx.Lock()
-	defer wb.mtx.Unlock()
-	if len(wb.pendingWrites) == 0 {
+func (b *Batch) Commit() error {
+	defer b.unlock()
+	if b.db.closed {
+		return ErrDBClosed
+	}
+	if b.options.ReadOnly || len(b.pendingWrites) == 0 {
 		return nil
 	}
-	if uint(len(wb.pendingWrites)) > wb.options.MaxBatchNum {
-		return ErrExceedMaxBatchNum
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+
+	if b.committed {
+		return ErrBatchCommitted
+	}
+	if b.rollbacked {
+		return ErrBatchRollbacked
 	}
 
-	wb.db.mtx.Lock()
-	defer wb.db.mtx.Unlock()
-	// 当前事务序列号
-	curSeqNo := atomic.AddUint64(&wb.db.seqNo, 1)
-
-	// 先讲数据暂存起来
-	tmpPositions := make(map[string]*data.LogRecordPos)
-	for _, record := range wb.pendingWrites {
-		logRecordPos, err := wb.db.appendLogRecord(&data.LogRecord{
-			Key:   logRecordKeyWithSeq(record.Key, curSeqNo),
-			Value: record.Value,
-			Type:  record.Type,
-		})
-		if err != nil {
-			return err
-		}
-		tmpPositions[string(record.Key)] = logRecordPos
+	batchId := b.batchId.Generate()
+	for _, record := range b.pendingWrites {
+		buf := bytebufferpool.Get()
+		b.buffers = append(b.buffers, buf)
+		record.BatchId = uint64(batchId)
+		encRecord := data.EncodeLogRecord(record, b.db.encodeHeader, buf)
+		b.db.dataFiles.PendingWrites(encRecord)
 	}
 
-	// 标识事务完成
-	finishedRecord := &data.LogRecord{
-		Key:  logRecordKeyWithSeq(txnFinKey, curSeqNo),
-		Type: data.LogRecordTxnFinished,
-	}
+	buf := bytebufferpool.Get()
+	b.buffers = append(b.buffers, buf)
+	encRecord := data.EncodeLogRecord(&data.LogRecord{
+		Key:  batchId.Bytes(),
+		Type: data.LogRecordBatchFinished,
+	}, b.db.encodeHeader, buf)
+	b.db.dataFiles.PendingWrites(encRecord)
 
-	if _, err := wb.db.appendLogRecord(finishedRecord); err != nil {
+	chunkPositions, err := b.db.dataFiles.WriteAll()
+	if err != nil {
+		b.db.dataFiles.ClearPendingWrites()
 		return err
 	}
-
-	// 根据配置是否决定持久化
-	if wb.options.SyncWrites && wb.db.activeFile != nil {
-		if err := wb.db.activeFile.Sync(); err != nil {
+	// 写入的数据(chunk) + BatchFinished
+	if len(chunkPositions) != len(b.pendingWrites)+1 {
+		panic("chunk positions length is not equal to pending writes length")
+	}
+	if b.options.Sync && !b.db.options.Sync {
+		if err := b.db.dataFiles.Sync(); err != nil {
 			return err
 		}
 	}
-
-	// 更新内存索引
-	for _, record := range wb.pendingWrites {
-		pos := tmpPositions[string(record.Key)]
-		var oldPos *data.LogRecordPos
-		if record.Type == data.LogRecordNormal {
-			oldPos = wb.db.index.Put(record.Key, pos)
-		}
+	for i, record := range b.pendingWrites {
 		if record.Type == data.LogRecordDeleted {
-			oldPos, _ = wb.db.index.Delete(record.Key)
+			b.db.index.Delete(record.Key)
+		} else {
+			b.db.index.Put(record.Key, chunkPositions[i])
 		}
-		if oldPos != nil {
-			wb.db.reclaimSize += int64(oldPos.Size)
-		}
+		b.db.recordPool.Put(record)
 	}
-
-	// 清空暂存数据
-	wb.pendingWrites = make(map[string]*data.LogRecord)
-
+	b.committed = true
 	return nil
 }
 
-// logRecordKeyWithSeq key + Seq Number 编码
-func logRecordKeyWithSeq(key []byte, seqNo uint64) []byte {
-	seq := make([]byte, binary.MaxVarintLen64)
-	n := binary.PutUvarint(seq[:], seqNo)
+func (b *Batch) Rollback() error {
+	defer b.unlock()
+	if b.db.closed {
+		return ErrDBClosed
+	}
 
-	encKey := make([]byte, n+len(key))
-	copy(encKey[:n], seq[:n])
-	copy(encKey[n:], key)
-	return encKey
+	if b.committed {
+		return ErrBatchCommitted
+	}
+	if b.rollbacked {
+		return ErrBatchRollbacked
+	}
+
+	for _, buf := range b.buffers {
+		bytebufferpool.Put(buf)
+	}
+	if !b.options.ReadOnly {
+		for _, record := range b.pendingWrites {
+			b.db.recordPool.Put(record)
+		}
+		b.pendingWrites = b.pendingWrites[:0]
+		for key := range b.pendingWritesMap {
+			delete(b.pendingWritesMap, key)
+		}
+	}
+	b.rollbacked = true
+	return nil
 }
 
-// parseLogRecordKey 解析LogRecord的key，获得实际的key和序列号
-func parseLogRecordKey(key []byte) ([]byte, uint64) {
-	seqNo, n := binary.Uvarint(key)
-	realKey := key[n:]
-	return realKey, seqNo
+func (b *Batch) lookupPendingWrites(key []byte) *data.LogRecord {
+	if len(b.pendingWritesMap) == 0 {
+		return nil
+	}
+	// key -> uint64
+	hashKey := utils.MemHash(key)
+	for _, entry := range b.pendingWritesMap[hashKey] {
+		if bytes.Equal(b.pendingWrites[entry].Key, key) {
+			return b.pendingWrites[entry]
+		}
+	}
+	return nil
+}
+
+func (b *Batch) appendPendingWrites(key []byte, record *data.LogRecord) {
+	b.pendingWrites = append(b.pendingWrites, record)
+	if b.pendingWritesMap == nil {
+		b.pendingWritesMap = make(map[uint64][]int)
+	}
+	hashKey := utils.MemHash(key)
+	b.pendingWritesMap[hashKey] = append(b.pendingWritesMap[hashKey], len(b.pendingWrites)-1)
 }

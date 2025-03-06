@@ -1,124 +1,116 @@
 package data
 
 import (
+	"bitcask/wal"
 	"encoding/binary"
-	"hash/crc32"
+	"github.com/valyala/bytebufferpool"
 )
-
-// LogRecordPos 内存数据索引，主要描述数据在磁盘上的位置
-type LogRecordPos struct {
-	Fid    uint32 // 文件 id: 表示数据存储到哪个文件中去了
-	Offset int64  // 偏移量，表示将数据存储到文件的哪个位置
-	Size   uint32 // 数据在磁盘上的大小
-}
 
 type LogRecordType = byte
 
-// maxLogRecordHeaderSize (cyc)4 + (type)1 + (k size)5 + (v size)5
-const maxLogRecordHeaderSize = binary.MaxVarintLen32*2 + 5
+// maxLogRecordHeaderSize  (type)1 + (batchId)10 + (expire)10 + (k size)5 + (v size)5
+const MaxLogRecordHeaderSize = 1 + binary.MaxVarintLen32*2 + binary.MaxVarintLen64*2
 
 const (
 	LogRecordNormal LogRecordType = iota
 	LogRecordDeleted
-	LogRecordTxnFinished
+	LogRecordBatchFinished
 )
 
 type LogRecord struct {
-	Key   []byte
-	Value []byte
-	Type  LogRecordType
+	Key     []byte
+	Value   []byte
+	Type    LogRecordType
+	BatchId uint64
+	Expire  int64
 }
 
-type LogRecordHeader struct {
-	crc        uint32
-	recordType LogRecordType
-	keySize    uint32
-	valueSize  uint32
+type IndexRecord struct {
+	Key        []byte
+	RecordType LogRecordType
+	Position   *wal.ChunkPosition
 }
 
-type TransactionRecord struct {
-	Record *LogRecord
-	Pos    *LogRecordPos
-}
-
-// EncodeLogRecord 转换LogRecord为字符数组和长度
-// {log_record[], 长度}
-func EncodeLogRecord(logRecord *LogRecord) ([]byte, int64) {
-	// {cyc(4) | type(1) | key_size([0, 5)) | value_size([0, 5)) | key | value}
-	header := make([]byte, maxLogRecordHeaderSize)
-
-	// 第5个字节存type
-	header[4] = logRecord.Type
-	var idx = 5
-	idx += binary.PutVarint(header[idx:], int64(len(logRecord.Key)))   // (+ key_size)
-	idx += binary.PutVarint(header[idx:], int64(len(logRecord.Value))) // (+ value_size)
-	var size = idx + len(logRecord.Value) + len(logRecord.Key)
-	eBytes := make([]byte, size)
-	// 深拷贝
-	copy(eBytes[:idx], header[:idx])
-	// 搞定了头后，把kv内容拷过来
-	copy(eBytes[idx:], logRecord.Key)
-	copy(eBytes[idx+len(logRecord.Key):], logRecord.Value)
-	// 进行crc校验
-	crc := crc32.ChecksumIEEE(eBytes[4:])          //
-	binary.LittleEndian.PutUint32(eBytes[:4], crc) // 小端序
-
-	// fmt.Printf("header size : %d, crc : %d\n", idx, crc)
-
-	return eBytes, int64(size)
+// encodeLogRecord 转换LogRecord为字符数组和长度
+func EncodeLogRecord(logRecord *LogRecord, header []byte, buf *bytebufferpool.ByteBuffer) []byte {
+	// { type | batch id | key size | value size | expire | key | value }
+	header[0] = logRecord.Type
+	var index = 1
+	index += binary.PutUvarint(header[index:], logRecord.BatchId)
+	index += binary.PutVarint(header[index:], int64(len(logRecord.Key)))
+	index += binary.PutVarint(header[index:], int64(len(logRecord.Value)))
+	index += binary.PutVarint(header[index:], logRecord.Expire)
+	_, _ = buf.Write(header[:index])
+	_, _ = buf.Write(logRecord.Key)
+	_, _ = buf.Write(logRecord.Value)
+	return buf.Bytes()
 }
 
 // decodeLogRecordHeader {头部， 头长}
-func decodeLogRecordHeader(buf []byte) (*LogRecordHeader, int64) {
-	if len(buf) <= 4 {
-		return nil, 0
-	}
-	header := &LogRecordHeader{
-		crc:        binary.LittleEndian.Uint32(buf[:4]),
-		recordType: buf[4],
-	}
+func DecodeLogRecord(buf []byte) *LogRecord {
+	recordType := buf[0]
+	var index uint32 = 1
+	batchId, n := binary.Uvarint(buf[index:])
+	index += uint32(n)
+	keySize, n := binary.Varint(buf[index:])
+	index += uint32(n)
+	valueSize, n := binary.Varint(buf[index:])
+	index += uint32(n)
+	expire, n := binary.Varint(buf[index:])
+	index += uint32(n)
 
-	var idx = 5
-	ks, n := binary.Varint(buf[idx:])
-	header.keySize = uint32(ks)
+	key := make([]byte, keySize)
+	copy(key[:], buf[index:index+uint32(keySize)])
+	index += uint32(keySize)
+
+	value := make([]byte, valueSize)
+	copy(value[:], buf[index:index+uint32(valueSize)])
+	return &LogRecord{
+		Key:     key,
+		Value:   value,
+		Type:    recordType,
+		BatchId: batchId,
+		Expire:  expire,
+	}
+}
+
+func EncodeHintRecord(key []byte, pos *wal.ChunkPosition) []byte {
+	// (SegmentID)5 + (BlockNumber)5 + (ChunkOffset)10 + (ChunkSize)5 = 25
+	buf := make([]byte, 25)
+	var idx = 0
+	idx += binary.PutUvarint(buf[idx:], uint64(pos.SegmentID))
+	idx += binary.PutUvarint(buf[idx:], uint64(pos.BlockNumber))
+	idx += binary.PutUvarint(buf[idx:], uint64(pos.ChunkOffset))
+	idx += binary.PutUvarint(buf[idx:], uint64(pos.ChunkSize))
+	res := make([]byte, idx+len(key))
+	copy(res, buf[:idx])
+	copy(res[idx:], key)
+	return res
+}
+
+func DecodeHintRecord(buf []byte) ([]byte, *wal.ChunkPosition) {
+	var idx = 0
+	segmentId, n := binary.Uvarint(buf[idx:])
 	idx += n
-	vs, n := binary.Varint(buf[idx:])
-	header.valueSize = uint32(vs)
+	blockNumber, n := binary.Uvarint(buf[idx:])
+	idx += n
+	chunkOffset, n := binary.Uvarint(buf[idx:])
+	idx += n
+	chunkSize, n := binary.Uvarint(buf[idx:])
 	idx += n
 
-	return header, int64(idx)
-}
+	key := buf[idx:]
 
-func getLogRecordCRC(lr *LogRecord, header []byte) uint32 {
-	if lr == nil {
-		return 0
+	return key, &wal.ChunkPosition{
+		SegmentID:   wal.SegmentID(segmentId),
+		BlockNumber: uint32(blockNumber),
+		ChunkOffset: int64(chunkOffset),
+		ChunkSize:   uint32(chunkSize),
 	}
-	crc := crc32.ChecksumIEEE(header[:])
-	crc = crc32.Update(crc, crc32.IEEETable, lr.Key)
-	crc = crc32.Update(crc, crc32.IEEETable, lr.Value)
-	return crc
 }
 
-// EncodeLogRecordPos 对位置信息编码吗
-func EncodeLogRecordPos(pos *LogRecordPos) []byte {
-	buf := make([]byte, binary.MaxVarintLen32*2+binary.MaxVarintLen64)
-	var index int = 0
-	index += binary.PutVarint(buf[index:], int64(pos.Fid))
-	index += binary.PutVarint(buf[index:], pos.Offset)
-	index += binary.PutVarint(buf[index:], int64(pos.Size))
-	return buf[:index]
-}
-
-func DecodeLogRecordPos(buf []byte) *LogRecordPos {
-	var index = 0
-	fid, n := binary.Varint(buf[index:])
-	index += n
-	offset, n := binary.Varint(buf[index:])
-	index += n
-	size, _ := binary.Varint(buf[index:])
-	return &LogRecordPos{
-		Fid:    uint32(fid),
-		Offset: offset,
-		Size:   uint32(size),
-	}
+func encodeMergeFinRecord(segmentId wal.SegmentID) []byte {
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, segmentId)
+	return buf
 }

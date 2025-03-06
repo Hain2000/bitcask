@@ -1,20 +1,148 @@
 package index
 
 import (
-	"bitcask/data"
+	"bitcask/wal"
 	"bytes"
 	"github.com/google/btree"
-	"sort"
 	"sync"
 )
 
-type Btree struct {
+type MemoryBtree struct {
 	tree *btree.BTree
 	lock *sync.RWMutex
 }
 
-func (bt *Btree) Iterator(reverse bool) Iterator {
-	if bt == nil {
+type item struct {
+	key []byte
+	pos *wal.ChunkPosition
+}
+
+func (x *item) Less(bi btree.Item) bool {
+	if bi == nil {
+		return false
+	}
+	return bytes.Compare(x.key, bi.(*item).key) < 0
+}
+
+func newBTree() *MemoryBtree {
+	return &MemoryBtree{
+		tree: btree.New(32),
+		lock: new(sync.RWMutex),
+	}
+}
+
+func (bt *MemoryBtree) Put(key []byte, pos *wal.ChunkPosition) *wal.ChunkPosition {
+	bt.lock.Lock()
+	defer bt.lock.Unlock()
+	oldValue := bt.tree.ReplaceOrInsert(&item{key: key, pos: pos})
+	if oldValue != nil {
+		return oldValue.(*item).pos
+	}
+	return nil
+}
+
+func (bt *MemoryBtree) Get(key []byte) *wal.ChunkPosition {
+	bt.lock.RLock()
+	defer bt.lock.RUnlock()
+	val := bt.tree.Get(&item{key: key})
+	if val != nil {
+		return val.(*item).pos
+	}
+	return nil
+}
+
+func (bt *MemoryBtree) Delete(key []byte) (*wal.ChunkPosition, bool) {
+	bt.lock.Lock()
+	defer bt.lock.Unlock()
+	val := bt.tree.Delete(&item{key: key})
+	if val != nil {
+		return val.(*item).pos, true
+	}
+	return nil, false
+}
+
+func (bt *MemoryBtree) Size() int {
+	return bt.tree.Len()
+}
+
+func (bt *MemoryBtree) Close() error {
+	return nil
+}
+
+func (bt *MemoryBtree) Ascend(handleFn func(key []byte, position *wal.ChunkPosition) (bool, error)) {
+	bt.lock.RLock()
+	defer bt.lock.RUnlock()
+	bt.tree.Ascend(func(i btree.Item) bool {
+		cont, err := handleFn(i.(*item).key, i.(*item).pos)
+		if err != nil {
+			return false
+		}
+		return cont
+	})
+}
+
+func (bt *MemoryBtree) AscendRange(startKey, endKey []byte, handleFn func(key []byte, position *wal.ChunkPosition) (bool, error)) {
+	bt.lock.RLock()
+	defer bt.lock.RUnlock()
+	bt.tree.AscendRange(&item{key: startKey}, &item{key: endKey}, func(i btree.Item) bool {
+		cont, err := handleFn(i.(*item).key, i.(*item).pos)
+		if err != nil {
+			return false
+		}
+		return cont
+	})
+}
+
+func (bt *MemoryBtree) AscendGreaterOrEqual(key []byte, handleFn func(key []byte, position *wal.ChunkPosition) (bool, error)) {
+	bt.lock.RLock()
+	defer bt.lock.RUnlock()
+	bt.tree.AscendGreaterOrEqual(&item{key: key}, func(i btree.Item) bool {
+		cont, err := handleFn(i.(*item).key, i.(*item).pos)
+		if err != nil {
+			return false
+		}
+		return cont
+	})
+}
+
+func (bt *MemoryBtree) Descend(handleFn func(key []byte, pos *wal.ChunkPosition) (bool, error)) {
+	bt.lock.RLock()
+	defer bt.lock.RUnlock()
+	bt.tree.Descend(func(i btree.Item) bool {
+		cont, err := handleFn(i.(*item).key, i.(*item).pos)
+		if err != nil {
+			return false
+		}
+		return cont
+	})
+}
+
+func (bt *MemoryBtree) DescendRange(startKey, endKey []byte, handleFn func(key []byte, position *wal.ChunkPosition) (bool, error)) {
+	bt.lock.RLock()
+	defer bt.lock.RUnlock()
+	bt.tree.DescendRange(&item{key: startKey}, &item{key: endKey}, func(i btree.Item) bool {
+		cont, err := handleFn(i.(*item).key, i.(*item).pos)
+		if err != nil {
+			return false
+		}
+		return cont
+	})
+}
+
+func (bt *MemoryBtree) DescendLessOrEqual(key []byte, handleFn func(key []byte, position *wal.ChunkPosition) (bool, error)) {
+	bt.lock.RLock()
+	defer bt.lock.RUnlock()
+	bt.tree.DescendLessOrEqual(&item{key: key}, func(i btree.Item) bool {
+		cont, err := handleFn(i.(*item).key, i.(*item).pos)
+		if err != nil {
+			return false
+		}
+		return cont
+	})
+}
+
+func (bt *MemoryBtree) Iterator(reverse bool) IndexIterator {
+	if bt.tree == nil {
 		return nil
 	}
 	bt.lock.RLock()
@@ -22,116 +150,116 @@ func (bt *Btree) Iterator(reverse bool) Iterator {
 	return newBtreeIterator(bt.tree, reverse)
 }
 
-func NewBTree() *Btree {
-	return &Btree{
-		tree: btree.New(32),
-		lock: new(sync.RWMutex),
-	}
-}
-
-func (bt *Btree) Put(key []byte, pos *data.LogRecordPos) *data.LogRecordPos {
-	it := &Item{key: key, pos: pos}
-	bt.lock.Lock()
-	oldItem := bt.tree.ReplaceOrInsert(it)
-	bt.lock.Unlock()
-	if oldItem == nil {
-		return nil
-	}
-	return oldItem.(*Item).pos
-}
-
-func (bt *Btree) Get(key []byte) *data.LogRecordPos {
-	it := &Item{key: key}
-	btreeItem := bt.tree.Get(it)
-	if btreeItem == nil {
-		return nil
-	}
-	return btreeItem.(*Item).pos
-}
-
-func (bt *Btree) Delete(key []byte) (*data.LogRecordPos, bool) {
-	it := &Item{key: key}
-	bt.lock.Lock()
-	oidItem := bt.tree.Delete(it)
-	bt.lock.Unlock()
-	if oidItem == nil {
-		return nil, false
-	}
-	return oidItem.(*Item).pos, true
-}
-
-func (bt *Btree) Size() int {
-	return bt.tree.Len()
-}
-
-func (bt *Btree) Close() error {
-	return nil
-}
-
 // BTree 索引迭代器
 type btreeIterator struct {
-	curIndex int
-	reverse  bool    // 是否反向
-	values   []*Item // [key] = 位置索引信息
+	tree    *btree.BTree
+	current *item // 当前正在遍历的元素
+	reverse bool  // 是否反向
+	valid   bool
 }
 
 func newBtreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
-	var idx int
-	values := make([]*Item, tree.Len())
-
-	// lambda
-	saveValues := func(it btree.Item) bool {
-		values[idx] = it.(*Item)
-		idx++
-		return true
+	var current *item
+	var valid bool
+	if tree.Len() > 0 {
+		if reverse {
+			current = tree.Max().(*item)
+		} else {
+			current = tree.Min().(*item)
+		}
+		valid = true
 	}
-
-	if reverse {
-		tree.Descend(saveValues) // 倒排
-	} else {
-		tree.Ascend(saveValues) // 正排
-	}
-
 	return &btreeIterator{
-		curIndex: 0,
-		reverse:  reverse,
-		values:   values,
+		tree:    tree.Clone(),
+		current: current,
+		reverse: reverse,
+		valid:   valid,
 	}
 }
 
-func (bti *btreeIterator) Rewind() {
-	bti.curIndex = 0
+func (it *btreeIterator) Rewind() {
+	if it.tree == nil || it.tree.Len() == 0 {
+		return
+	}
+	if it.reverse {
+		it.current = it.tree.Max().(*item)
+	} else {
+		it.current = it.tree.Min().(*item)
+	}
+	it.valid = true
 }
 
-func (bti *btreeIterator) Seek(key []byte) {
-	if bti.reverse {
-		bti.curIndex = sort.Search(len(bti.values), func(i int) bool {
-			return bytes.Compare(bti.values[i].key, key) <= 0 // 找到一个i使得 [i].key >= key
+func (it *btreeIterator) Seek(key []byte) {
+	if it.tree == nil || !it.valid {
+		return
+	}
+	seekItem := &item{key: key}
+	it.valid = false
+	if it.reverse {
+		it.tree.DescendLessOrEqual(seekItem, func(i btree.Item) bool {
+			it.current = i.(*item)
+			it.valid = true
+			return false
 		})
 	} else {
-		bti.curIndex = sort.Search(len(bti.values), func(i int) bool {
-			return bytes.Compare(bti.values[i].key, key) >= 0
+		it.tree.AscendGreaterOrEqual(seekItem, func(i btree.Item) bool {
+			it.current = i.(*item)
+			it.valid = true
+			return false
 		})
 	}
-
 }
 
-func (bti *btreeIterator) Next() {
-	bti.curIndex++
+func (it *btreeIterator) Next() {
+	if it.tree == nil || !it.valid {
+		return
+	}
+	it.valid = false
+	if it.reverse {
+		it.tree.DescendLessOrEqual(it.current, func(i btree.Item) bool {
+			if !i.(*item).Less(it.current) {
+				return true
+			}
+			it.current = i.(*item)
+			it.valid = true
+			return false
+		})
+	} else {
+		it.tree.AscendGreaterOrEqual(it.current, func(i btree.Item) bool {
+			if !it.current.Less(i.(*item)) {
+				return true
+			}
+			it.current = i.(*item)
+			it.valid = true
+			return false
+		})
+	}
+	if !it.valid {
+		it.current = nil
+	}
 }
 
-func (bti *btreeIterator) Valid() bool {
-	return bti.curIndex < len(bti.values)
+func (it *btreeIterator) Valid() bool {
+	return it.valid
 }
 
-func (bti *btreeIterator) Key() []byte {
-	return bti.values[bti.curIndex].key
+func (it *btreeIterator) Key() []byte {
+	if !it.valid {
+		return nil
+	}
+	return it.current.key
 }
 
-func (bti *btreeIterator) Value() *data.LogRecordPos {
-	return bti.values[bti.curIndex].pos
+func (it *btreeIterator) Value() *wal.ChunkPosition {
+	if !it.valid {
+		return nil
+	}
+	return it.current.pos
 }
 
-func (bti *btreeIterator) Close() {
-	bti.values = nil
+func (it *btreeIterator) Close() {
+	it.tree.Clear(true)
+	it.tree = nil
+	it.current = nil
+	it.valid = false
 }

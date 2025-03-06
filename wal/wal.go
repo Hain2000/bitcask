@@ -146,7 +146,7 @@ func (wal *WAL) SetIsStartupTraversal(v bool) {
 }
 
 func (wal *WAL) NewReaderWithMax(segId SegmentID) *Reader {
-	wal.mu.RUnlock()
+	wal.mu.RLock()
 	defer wal.mu.RUnlock()
 
 	var segmentReaders []*segmentReader

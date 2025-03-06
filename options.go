@@ -1,52 +1,59 @@
 package bitcask
 
-import "os"
-
-type Options struct {
-	DirPath            string // 数据库数据目录
-	DataFileSize       int64  // 数据文件的大小
-	SyncWrite          bool   // 每次写是否需要持久化
-	IndexType          IdxType
-	BytesPerSync       uint // 累计写该阈值时，进行持久化
-	MMapAtStartup      bool // 启动MMap
-	DataFileMergeRatio float32
-}
-
-type IdxType = int8
-
-const (
-	BTREE IdxType = iota + 1
-	ART
-	BPLUSTREE
+import (
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
 )
 
+const (
+	B  = 1
+	KB = 1024 * B
+	MB = 1024 * KB
+	GB = 1024 * MB
+)
+
+type Options struct {
+	DirPath     string // 数据库数据目录
+	SegmentSize int64
+	Sync        bool
+	BytePerSync uint32 // 超过BytePerSync字节时，调用fsync()刷盘
+}
+
 var DefaultOptions = Options{
-	DirPath:            os.TempDir(),
-	DataFileSize:       256 * 1024 * 1024, // 256MB
-	SyncWrite:          false,
-	BytesPerSync:       0,
-	IndexType:          BTREE,
-	MMapAtStartup:      true,
-	DataFileMergeRatio: 0.5,
+	DirPath:     tempDBDir(),
+	SegmentSize: 1 * GB,
+	Sync:        false,
+	BytePerSync: 0,
 }
 
 // IteratorOptions 迭代器设置
 type IteratorOptions struct {
-	Prefix  []byte // 遍历前缀指定的Key，默认为空
-	Reverse bool   // 是否反向，默认false(正向)
+	Prefix          []byte // 遍历前缀指定的Key，默认为空
+	Reverse         bool   // 是否反向，默认false(正向)
+	ContinueOnError bool
 }
 
 var DefaultIteratorOptions = IteratorOptions{
-	Prefix:  nil,
-	Reverse: false,
+	Prefix:          nil,
+	Reverse:         false,
+	ContinueOnError: false,
 }
 
-type WriteBatchOptions struct {
-	MaxBatchNum uint // 一个批次中最大的数据量
-	SyncWrites  bool // 提交时是否sync持久化
+type BatchOptions struct {
+	ReadOnly bool
+	Sync     bool // 提交时是否sync持久化
 }
 
-var DefaultWriteBatchOptions = WriteBatchOptions{
-	MaxBatchNum: 10000,
-	SyncWrites:  true,
+var DefaultBatchOptions = BatchOptions{
+	ReadOnly: false,
+	Sync:     true,
+}
+
+var nameRand = rand.NewSource(time.Now().UnixNano())
+
+func tempDBDir() string {
+	return filepath.Join(os.TempDir(), "bitcask-temp"+strconv.Itoa(int(nameRand.Int63())))
 }
