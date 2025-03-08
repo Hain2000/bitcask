@@ -9,24 +9,28 @@ import (
 	"fmt"
 	"github.com/bwmarrin/snowflake"
 	"github.com/gofrs/flock"
+	"github.com/robfig/cron/v3"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 type DB struct {
-	options       Options
-	mtx           sync.RWMutex
-	dataFiles     *wal.WAL
-	hintFile      *wal.WAL
-	index         index.Indexer // 内存索引
-	mergerRunning uint32        // 是否有Merge进行
-	fileLock      *flock.Flock  // 文件锁，多进程之间互斥
-	closed        bool
-	batchPool     sync.Pool
-	recordPool    sync.Pool
-	encodeHeader  []byte
+	options          Options
+	mtx              sync.RWMutex
+	dataFiles        *wal.WAL
+	hintFile         *wal.WAL
+	index            index.Indexer // 内存索引
+	mergerRunning    uint32        // 是否有Merge进行
+	fileLock         *flock.Flock  // 文件锁，多进程之间互斥
+	closed           bool
+	batchPool        sync.Pool
+	recordPool       sync.Pool
+	encodeHeader     []byte
+	expiredCursorKey []byte
+	cronScheduler    *cron.Cron
 }
 
 type Stat struct {
@@ -53,7 +57,6 @@ func Open(options Options) (*DB, error) {
 		if err := os.MkdirAll(options.DirPath, os.ModePerm); err != nil {
 			return nil, err
 		}
-
 	}
 	// 文件锁, 放在多个进程使用一个目录
 	fileLock := flock.New(filepath.Join(options.DirPath, fileLockName))
@@ -63,6 +66,11 @@ func Open(options Options) (*DB, error) {
 	}
 	if !hold {
 		return nil, ErrDatabaseIsUsing
+	}
+
+	// 如果有merge文件，需要先加载merge文件
+	if err = loadMergeFiles(options.DirPath); err != nil {
+		return nil, err
 	}
 
 	// 初始化 DB 实例结构体
@@ -79,8 +87,22 @@ func Open(options Options) (*DB, error) {
 	if db.dataFiles, err = db.openWalFiles(); err != nil {
 		return nil, err
 	}
+	// 加载索引
 	if err = db.loadIndex(); err != nil {
 		return nil, err
+	}
+
+	if len(options.AutoMergeCronExpr) > 0 {
+		db.cronScheduler = cron.New(
+			cron.WithParser(cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)),
+		)
+		_, err = db.cronScheduler.AddFunc(options.AutoMergeCronExpr, func() {
+			_ = db.Merge(true)
+		})
+		if err != nil {
+			return nil, err
+		}
+		db.cronScheduler.Start()
 	}
 
 	return db, nil
@@ -111,10 +133,21 @@ func (db *DB) loadIndex() error {
 }
 
 func (db *DB) loadIndexFromWAL() error {
+	mergeFinSegmentId, err := getMergeFinSegmentId(db.options.DirPath)
+	if err != nil {
+		return err
+	}
 	indexRecords := make(map[uint64][]*data.IndexRecord)
 	reader := db.dataFiles.NewReader()
+	now := time.Now().UnixNano()
 	db.dataFiles.SetIsStartupTraversal(true)
 	for {
+		// 这部分从hint文件中加载
+		if reader.CurrentSegmentId() <= mergeFinSegmentId {
+			reader.SkipCurrentSegment()
+			continue
+		}
+
 		chunk, position, err := reader.Next()
 		if err != nil {
 			if err == io.EOF {
@@ -136,7 +169,15 @@ func (db *DB) loadIndexFromWAL() error {
 				}
 			}
 			delete(indexRecords, uint64(batchId))
+		} else if record.Type == data.LogRecordNormal && record.BatchId == mergeFinishedBatchID {
+			// 别忘了加载merge文件里的
+			db.index.Put(record.Key, position)
 		} else {
+			if record.IsExpired(now) {
+				db.index.Delete(record.Key)
+				continue
+			}
+
 			indexRecords[record.BatchId] = append(indexRecords[record.BatchId],
 				&data.IndexRecord{
 					Key:        record.Key,
@@ -158,6 +199,11 @@ func checkOptions(options Options) error {
 		return errors.New("database data file must be greater than 0")
 	}
 
+	if len(options.AutoMergeCronExpr) > 0 {
+		if _, err := cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor).Parse(options.AutoMergeCronExpr); err != nil {
+			return fmt.Errorf("database auto merge cron expression is invalid, err: %s", err)
+		}
+	}
 	return nil
 }
 
@@ -169,6 +215,20 @@ func (db *DB) Put(key []byte, value []byte) error {
 	}()
 	batch.init(false, false, db)
 	if err := batch.Put(key, value); err != nil {
+		_ = batch.Rollback()
+		return err
+	}
+	return batch.Commit()
+}
+
+func (db *DB) PutWithTTL(key []byte, value []byte, ttl time.Duration) error {
+	batch := db.batchPool.Get().(*Batch)
+	defer func() {
+		batch.reset()
+		db.batchPool.Put(batch)
+	}()
+	batch.init(false, false, db)
+	if err := batch.PutWithTTL(key, value, ttl); err != nil {
 		_ = batch.Rollback()
 		return err
 	}
@@ -212,6 +272,45 @@ func (db *DB) Exist(key []byte) (bool, error) {
 	return batch.Exist(key)
 }
 
+func (db *DB) Expire(key []byte, ttl time.Duration) error {
+	batch := db.batchPool.Get().(*Batch)
+	defer func() {
+		batch.reset()
+		db.batchPool.Put(batch)
+	}()
+	batch.init(false, false, db)
+	if err := batch.Expire(key, ttl); err != nil {
+		_ = batch.Rollback()
+		return err
+	}
+	return batch.Commit()
+}
+
+func (db *DB) TTL(key []byte) (time.Duration, error) {
+	batch := db.batchPool.Get().(*Batch)
+	batch.init(true, false, db)
+	defer func() {
+		_ = batch.Commit()
+		batch.reset()
+		db.batchPool.Put(batch)
+	}()
+	return batch.TTL(key)
+}
+
+func (db *DB) Persist(key []byte) error {
+	batch := db.batchPool.Get().(*Batch)
+	defer func() {
+		batch.reset()
+		db.batchPool.Put(batch)
+	}()
+	batch.init(false, false, db)
+	if err := batch.Persist(key); err != nil {
+		_ = batch.Rollback()
+		return err
+	}
+	return batch.Commit()
+}
+
 // CurListKeys 获取所有的key
 func (db *DB) CurListKeys() [][]byte {
 	iterator := db.index.Iterator(false)
@@ -223,6 +322,62 @@ func (db *DB) CurListKeys() [][]byte {
 		idx++
 	}
 	return keys
+}
+
+func (db *DB) checkValue(chunk []byte) []byte {
+	record := data.DecodeLogRecord(chunk)
+	now := time.Now().UnixNano()
+	if record.Type != data.LogRecordDeleted && !record.IsExpired(now) {
+		return record.Value
+	}
+	return nil
+}
+
+func (db *DB) Ascend(handleFn func(k []byte, v []byte) (bool, error)) {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+	db.index.Ascend(func(key []byte, position *wal.ChunkPosition) (bool, error) {
+		chunk, err := db.dataFiles.Read(position)
+		if err != nil {
+			return false, err
+		}
+		if value := db.checkValue(chunk); err != nil {
+			return handleFn(key, value)
+		}
+		return true, nil
+	})
+}
+
+func (db *DB) AscendRange(startKey, endKey []byte, handleFn func(k []byte, v []byte) (bool, error)) {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+
+	db.index.AscendRange(startKey, endKey, func(key []byte, pos *wal.ChunkPosition) (bool, error) {
+		chunk, err := db.dataFiles.Read(pos)
+		if err != nil {
+			return false, nil
+		}
+		if value := db.checkValue(chunk); value != nil {
+			return handleFn(key, value)
+		}
+		return true, nil
+	})
+}
+
+func (db *DB) AscendGreaterOrEqual(key []byte, handleFn func(k []byte, v []byte) (bool, error)) {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+
+	db.index.AscendGreaterOrEqual(key, func(key []byte, pos *wal.ChunkPosition) (bool, error) {
+		chunk, err := db.dataFiles.Read(pos)
+		if err != nil {
+			return false, nil
+		}
+		if value := db.checkValue(chunk); value != nil {
+			return handleFn(key, value)
+		}
+		return true, nil
+	})
 }
 
 // Close 关闭数据库
@@ -240,6 +395,10 @@ func (db *DB) Close() error {
 
 	if err := db.fileLock.Unlock(); err != nil {
 		return err
+	}
+
+	if db.cronScheduler != nil {
+		db.cronScheduler.Stop()
 	}
 
 	db.closed = true

@@ -6,13 +6,13 @@ import (
 	"bitcask/wal"
 	"encoding/binary"
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/valyala/bytebufferpool"
 	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -53,7 +53,7 @@ func (db *DB) doMerge() error {
 	db.mtx.Lock()
 	if db.closed {
 		db.mtx.Unlock()
-		return errors.Wrap(ErrDBClosed, "riskyCall failed")
+		return ErrDBClosed
 	}
 	if db.dataFiles.IsEmpty() {
 		db.mtx.Unlock()
@@ -85,7 +85,7 @@ func (db *DB) doMerge() error {
 
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)
-
+	now := time.Now().UnixNano()
 	reader := db.dataFiles.NewReaderWithMax(preActiveSegId)
 	for {
 		buf.Reset()
@@ -97,7 +97,7 @@ func (db *DB) doMerge() error {
 			return err
 		}
 		record := data.DecodeLogRecord(chunk)
-		if record.Type == data.LogRecordNormal {
+		if record.Type == data.LogRecordNormal && (record.Expire == 0 || record.Expire > now) {
 			db.mtx.RLock()
 			indexPos := db.index.Get(record.Key)
 			db.mtx.RUnlock()

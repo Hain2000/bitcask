@@ -16,10 +16,11 @@ const (
 )
 
 type Options struct {
-	DirPath     string // 数据库数据目录
-	SegmentSize int64
-	Sync        bool
-	BytePerSync uint32 // 超过BytePerSync字节时，调用fsync()刷盘
+	DirPath           string // 数据库数据目录
+	SegmentSize       int64
+	Sync              bool
+	BytePerSync       uint32 // 超过BytePerSync字节时，调用fsync()刷盘
+	AutoMergeCronExpr string // 自动触发merge
 }
 
 var DefaultOptions = Options{

@@ -8,6 +8,7 @@ import (
 	"github.com/bwmarrin/snowflake"
 	"github.com/valyala/bytebufferpool"
 	"sync"
+	"time"
 )
 
 type Batch struct {
@@ -113,6 +114,28 @@ func (b *Batch) Put(key []byte, value []byte) error {
 	return nil
 }
 
+func (b *Batch) PutWithTTL(key []byte, value []byte, ttl time.Duration) error {
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+	if b.db.closed {
+		return ErrDBClosed
+	}
+	if b.options.ReadOnly {
+		return ErrReadOnlyBatch
+	}
+	b.mtx.Lock()
+	record := b.lookupPendingWrites(key)
+	if record == nil {
+		record = b.db.recordPool.Get().(*data.LogRecord)
+		b.appendPendingWrites(key, record)
+	}
+	record.Key, record.Value = key, value
+	record.Type, record.Expire = data.LogRecordNormal, time.Now().Add(ttl).UnixNano()
+	b.mtx.Unlock()
+	return nil
+}
+
 func (b *Batch) Get(key []byte) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, ErrKeyIsEmpty
@@ -120,11 +143,12 @@ func (b *Batch) Get(key []byte) ([]byte, error) {
 	if b.db.closed {
 		return nil, ErrDBClosed
 	}
+	now := time.Now().UnixNano()
 	b.mtx.RLock()
 	record := b.lookupPendingWrites(key)
 	b.mtx.RUnlock()
 	if record != nil {
-		if record.Type == data.LogRecordDeleted {
+		if record.Type == data.LogRecordDeleted || record.IsExpired(now) {
 			return nil, ErrKeyNotFound
 		}
 		return record.Value, nil
@@ -141,6 +165,10 @@ func (b *Batch) Get(key []byte) ([]byte, error) {
 	record = data.DecodeLogRecord(chunk)
 	if record.Type == data.LogRecordDeleted {
 		panic("Deleted data cannot exist in the index")
+	}
+	if record.IsExpired(now) {
+		b.db.index.Delete(record.Key)
+		return nil, ErrKeyNotFound
 	}
 	return record.Value, nil
 }
@@ -182,11 +210,12 @@ func (b *Batch) Exist(key []byte) (bool, error) {
 	if b.db.closed {
 		return false, ErrDBClosed
 	}
+	now := time.Now().UnixNano()
 	b.mtx.RLock()
 	record := b.lookupPendingWrites(key)
 	b.mtx.RUnlock()
 	if record != nil {
-		return record.Type != data.LogRecordDeleted, nil
+		return record.Type != data.LogRecordDeleted && !record.IsExpired(now), nil
 	}
 	position := b.db.index.Get(key)
 	if position == nil {
@@ -197,11 +226,138 @@ func (b *Batch) Exist(key []byte) (bool, error) {
 		return false, err
 	}
 	record = data.DecodeLogRecord(chunk)
-	if record.Type == data.LogRecordDeleted {
+	if record.Type == data.LogRecordDeleted || record.IsExpired(now) {
 		b.db.index.Delete(key)
 		return false, nil
 	}
 	return true, nil
+}
+
+// Expire 重新设置key的ttl
+func (b *Batch) Expire(key []byte, ttl time.Duration) error {
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+	if b.db.closed {
+		return ErrDBClosed
+	}
+	if b.options.ReadOnly {
+		return ErrReadOnlyBatch
+	}
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	record := b.lookupPendingWrites(key)
+	if record != nil {
+		if record.Type == data.LogRecordDeleted || record.IsExpired(time.Now().UnixNano()) {
+			return ErrKeyNotFound
+		}
+		record.Expire = time.Now().Add(ttl).UnixNano()
+		return nil
+	}
+	position := b.db.index.Get(key)
+	if position != nil {
+		return ErrKeyNotFound
+	}
+	chunk, err := b.db.dataFiles.Read(position)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	record = data.DecodeLogRecord(chunk)
+	if record.Type == data.LogRecordDeleted || record.IsExpired(now.UnixNano()) {
+		b.db.index.Delete(key)
+		return ErrKeyNotFound
+	}
+	record.Expire = now.Add(ttl).UnixNano()
+	b.appendPendingWrites(key, record)
+	return nil
+}
+
+// TTL 拿到key的TTL
+func (b *Batch) TTL(key []byte) (time.Duration, error) {
+	if len(key) == 0 {
+		return -1, ErrKeyIsEmpty
+	}
+	if b.db.closed {
+		return -1, ErrDBClosed
+	}
+	now := time.Now()
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	record := b.lookupPendingWrites(key)
+	if record != nil {
+		if record.Expire == 0 {
+			return -1, nil
+		}
+		if record.Type == data.LogRecordDeleted || record.IsExpired(now.UnixNano()) {
+			return -1, ErrKeyNotFound
+		}
+		return time.Duration(record.Expire - now.UnixNano()), nil
+	}
+
+	position := b.db.index.Get(key)
+	if position == nil {
+		return -1, ErrKeyNotFound
+	}
+	chunk, err := b.db.dataFiles.Read(position)
+	if err != nil {
+		return -1, err
+	}
+	record = data.DecodeLogRecord(chunk)
+	if record.Type == data.LogRecordDeleted {
+		return -1, ErrKeyNotFound
+	}
+	if record.IsExpired(now.UnixNano()) {
+		b.db.index.Delete(key)
+		return -1, ErrKeyNotFound
+	}
+	if record.Expire > 0 {
+		return time.Duration(record.Expire - now.UnixNano()), nil
+	}
+	return -1, nil
+}
+
+// Persist 用来去除TTL
+func (b *Batch) Persist(key []byte) error {
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+	if b.db.closed {
+		return ErrDBClosed
+	}
+	if b.options.ReadOnly {
+		return ErrReadOnlyBatch
+	}
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	record := b.lookupPendingWrites(key)
+	if record != nil {
+		if record.Type == data.LogRecordDeleted || record.IsExpired(time.Now().UnixNano()) {
+			return ErrKeyNotFound
+		}
+		record.Expire = 0
+		return nil
+	}
+	position := b.db.index.Get(key)
+	if position == nil {
+		return ErrKeyNotFound
+	}
+	chunk, err := b.db.dataFiles.Read(position)
+	if err != nil {
+		return err
+	}
+	record = data.DecodeLogRecord(chunk)
+	now := time.Now().UnixNano()
+	if record.Type == data.LogRecordDeleted || record.IsExpired(now) {
+		b.db.index.Delete(key)
+		return ErrKeyNotFound
+	}
+	if record.Expire == 0 {
+		return nil
+	}
+	record.Expire = 0
+	b.appendPendingWrites(key, record)
+	return nil
 }
 
 // Commit 提交事务，暂存的数据
@@ -224,6 +380,7 @@ func (b *Batch) Commit() error {
 	}
 
 	batchId := b.batchId.Generate()
+	now := time.Now().UnixNano()
 	for _, record := range b.pendingWrites {
 		buf := bytebufferpool.Get()
 		b.buffers = append(b.buffers, buf)
@@ -255,7 +412,7 @@ func (b *Batch) Commit() error {
 		}
 	}
 	for i, record := range b.pendingWrites {
-		if record.Type == data.LogRecordDeleted {
+		if record.Type == data.LogRecordDeleted || record.IsExpired(now) {
 			b.db.index.Delete(record.Key)
 		} else {
 			b.db.index.Put(record.Key, chunkPositions[i])

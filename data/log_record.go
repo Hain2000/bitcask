@@ -114,3 +114,8 @@ func EncodeMergeFinRecord(segmentId wal.SegmentID) []byte {
 	binary.LittleEndian.PutUint32(buf, segmentId)
 	return buf
 }
+
+func (lr *LogRecord) IsExpired(now int64) bool {
+	// 被使用 > 0
+	return lr.Expire > 0 && lr.Expire <= now
+}

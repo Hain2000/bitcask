@@ -272,7 +272,7 @@ func TestDB_Merge_Concurrent_Put(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 10000; i++ {
+			for i := 0; i < 50000; i++ {
 				key := utils.GetTestKey(rand.Int())
 				value := utils.RandomValue(128)
 				m.Store(string(key), value)
