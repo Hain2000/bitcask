@@ -1,6 +1,7 @@
 package wal
 
 import (
+	"bitcask/utils"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -161,7 +162,7 @@ func (seg *segment) writeToBuffer(data []byte, chunkBuffer *bytebufferpool.ByteB
 	startBufferLen := chunkBuffer.Len()
 	padding := uint32(0)
 	if seg.closed {
-		return nil, ErrClosed
+		return nil, utils.ErrorAt(ErrClosed)
 	}
 	// 确保block有存放data的空间
 	if seg.currentBlockSize+chunkHeaderSize >= blockSize {
@@ -234,7 +235,7 @@ func (seg *segment) appendChunkToBuffer(buf *bytebufferpool.ByteBuffer, data []b
 
 func (seg *segment) writeAll(data [][]byte) (positions []*ChunkPosition, err error) {
 	if seg.closed {
-		return nil, ErrClosed
+		return nil, utils.ErrorAt(ErrClosed)
 	}
 	originBlockNumber := seg.currentBlockNumber
 	originBlockSize := seg.currentBlockSize
@@ -278,7 +279,7 @@ func (seg *segment) writeChunkBuffer(buf *bytebufferpool.ByteBuffer) error {
 
 func (seg *segment) Write(data []byte) (pos *ChunkPosition, err error) {
 	if seg.closed {
-		return nil, ErrClosed
+		return nil, utils.ErrorAt(ErrClosed)
 	}
 	originBlockNumber := seg.currentBlockNumber
 	originBlockSize := seg.currentBlockSize
@@ -315,7 +316,7 @@ func (seg *segment) Read(blockNumber uint32, chunkOffset int64) ([]byte, error) 
 // Output:读取到的数据内容, 下一个块的起始位置信息, error
 func (seg *segment) readInternal(blockNumber uint32, chunkOffset int64) ([]byte, *ChunkPosition, error) {
 	if seg.closed {
-		return nil, nil, ErrClosed
+		return nil, nil, utils.ErrorAt(ErrClosed)
 	}
 	var (
 		result    []byte                              // 存储最终读取的数据
@@ -393,7 +394,7 @@ func (seg *segment) readInternal(blockNumber uint32, chunkOffset int64) ([]byte,
 // Next 取出当前chunk，并且使regReader指向下一个chunk
 func (segReader *segmentReader) Next() ([]byte, *ChunkPosition, error) {
 	if segReader.segment.closed {
-		return nil, nil, ErrClosed
+		return nil, nil, utils.ErrorAt(ErrClosed)
 	}
 
 	chunkPosition := &ChunkPosition{

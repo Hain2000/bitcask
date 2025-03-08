@@ -109,7 +109,7 @@ func DecodeHintRecord(buf []byte) ([]byte, *wal.ChunkPosition) {
 	}
 }
 
-func encodeMergeFinRecord(segmentId wal.SegmentID) []byte {
+func EncodeMergeFinRecord(segmentId wal.SegmentID) []byte {
 	buf := make([]byte, 4)
 	binary.LittleEndian.PutUint32(buf, segmentId)
 	return buf

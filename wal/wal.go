@@ -1,6 +1,7 @@
 package wal
 
 import (
+	"bitcask/utils"
 	"errors"
 	"fmt"
 	"io"
@@ -41,7 +42,7 @@ type Reader struct {
 
 func Open(options Options) (*WAL, error) {
 	if !strings.HasPrefix(options.SegmentFileExtension, ".") {
-		return nil, fmt.Errorf("segment file extension must start with '.'")
+		return nil, utils.ErrorAt(fmt.Errorf("segment file extension must start with '.'"))
 	}
 	wal := &WAL{
 		options:       options,
@@ -300,7 +301,7 @@ func (wal *WAL) Read(pos *ChunkPosition) ([]byte, error) {
 		segment = wal.olderSegments[pos.SegmentID]
 	}
 	if segment == nil {
-		return nil, fmt.Errorf("segment file %d%s not found", pos.SegmentID, wal.options.SegmentFileExtension)
+		return nil, utils.ErrorAt(fmt.Errorf("segment file %d%s not found", pos.SegmentID, wal.options.SegmentFileExtension))
 	}
 	return segment.Read(pos.BlockNumber, pos.ChunkOffset)
 }

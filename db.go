@@ -21,7 +21,7 @@ type DB struct {
 	dataFiles     *wal.WAL
 	hintFile      *wal.WAL
 	index         index.Indexer // 内存索引
-	mergerRunning bool          // 是否有Merge进行
+	mergerRunning uint32        // 是否有Merge进行
 	fileLock      *flock.Flock  // 文件锁，多进程之间互斥
 	closed        bool
 	batchPool     sync.Pool
@@ -101,9 +101,9 @@ func (db *DB) openWalFiles() (*wal.WAL, error) {
 }
 
 func (db *DB) loadIndex() error {
-	//if err := db.loadIndexFromHintFile(); err != nil {
-	//	return err
-	//}
+	if err := db.loadIndexFromHintFile(); err != nil {
+		return err
+	}
 	if err := db.loadIndexFromWAL(); err != nil {
 		return err
 	}
