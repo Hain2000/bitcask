@@ -96,6 +96,7 @@ func (db *DB) doMerge() error {
 			}
 			return err
 		}
+
 		record := data.DecodeLogRecord(chunk)
 		if record.Type == data.LogRecordNormal && (record.Expire == 0 || record.Expire > now) {
 			db.mtx.RLock()
@@ -117,7 +118,7 @@ func (db *DB) doMerge() error {
 		}
 	}
 	// 存下活跃segment id，后续合并用
-	mergeFinFile, err := db.openMergeFinishedFile()
+	mergeFinFile, err := mergeDB.openMergeFinishedFile()
 	if err != nil {
 		return err
 	}

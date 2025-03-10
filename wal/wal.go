@@ -122,7 +122,7 @@ func (wal *WAL) OpenActiveSegment() error {
 	if err != nil {
 		return err
 	}
-	wal.olderSegments[wal.activeSegment.id] = segment
+	wal.olderSegments[wal.activeSegment.id] = wal.activeSegment
 	wal.activeSegment = segment
 	return nil
 }
@@ -144,6 +144,37 @@ func (wal *WAL) SetIsStartupTraversal(v bool) {
 		seg.isStartupTraversal = v
 	}
 	wal.activeSegment.isStartupTraversal = v
+}
+
+func (wal *WAL) NewReaderWithStart(startPos *ChunkPosition) (*Reader, error) {
+	if startPos == nil {
+		return nil, errors.New("start position is nil")
+	}
+	wal.mu.RLock()
+	defer wal.mu.RUnlock()
+
+	reader := wal.NewReader()
+	for {
+		// skip the segment readers whose id is less than the given position's segment id.
+		if reader.CurrentSegmentId() < startPos.SegmentID {
+			reader.SkipCurrentSegment()
+			continue
+		}
+		// skip the chunk whose position is less than the given position.
+		currentPos := reader.CurrentChunkPosition()
+		if currentPos.BlockNumber >= startPos.BlockNumber &&
+			currentPos.ChunkOffset >= startPos.ChunkOffset {
+			break
+		}
+		// call Next to find again.
+		if _, _, err := reader.Next(); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+	}
+	return reader, nil
 }
 
 func (wal *WAL) NewReaderWithMax(segId SegmentID) *Reader {

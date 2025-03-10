@@ -255,7 +255,7 @@ func (b *Batch) Expire(key []byte, ttl time.Duration) error {
 		return nil
 	}
 	position := b.db.index.Get(key)
-	if position != nil {
+	if position == nil {
 		return ErrKeyNotFound
 	}
 	chunk, err := b.db.dataFiles.Read(position)

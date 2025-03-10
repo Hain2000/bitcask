@@ -5,6 +5,7 @@ import (
 	"bitcask/index"
 	"bitcask/utils"
 	"bitcask/wal"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/snowflake"
@@ -13,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -312,13 +314,13 @@ func (db *DB) Persist(key []byte) error {
 }
 
 // CurListKeys 获取所有的key
-func (db *DB) CurListKeys() [][]byte {
+func (db *DB) CurListKeys() []string {
 	iterator := db.index.Iterator(false)
 	defer iterator.Close()
-	keys := make([][]byte, db.index.Size())
+	keys := make([]string, db.index.Size())
 	var idx int
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
-		keys[idx] = iterator.Key()
+		keys[idx] = string(iterator.Key())
 		idx++
 	}
 	return keys
@@ -333,6 +335,111 @@ func (db *DB) checkValue(chunk []byte) []byte {
 	return nil
 }
 
+func (db *DB) Descend(handleFn func(k []byte, v []byte) (bool, error)) {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+	db.index.Descend(func(key []byte, position *wal.ChunkPosition) (bool, error) {
+		chunk, err := db.dataFiles.Read(position)
+		if err != nil {
+			return false, err
+		}
+		if value := db.checkValue(chunk); value != nil {
+			return handleFn(key, value)
+		}
+		return true, nil
+	})
+}
+
+func (db *DB) DescendRange(startKey, endKey []byte, handleFn func(k []byte, v []byte) (bool, error)) {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+
+	db.index.DescendRange(startKey, endKey, func(key []byte, pos *wal.ChunkPosition) (bool, error) {
+		chunk, err := db.dataFiles.Read(pos)
+		if err != nil {
+			return false, nil
+		}
+		if value := db.checkValue(chunk); value != nil {
+			return handleFn(key, value)
+		}
+		return true, nil
+	})
+}
+
+func (db *DB) DescendLessOrEqual(key []byte, handleFn func(k []byte, v []byte) (bool, error)) {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+
+	db.index.DescendLessOrEqual(key, func(key []byte, pos *wal.ChunkPosition) (bool, error) {
+		chunk, err := db.dataFiles.Read(pos)
+		if err != nil {
+			return false, nil
+		}
+		if value := db.checkValue(chunk); value != nil {
+			return handleFn(key, value)
+		}
+		return true, nil
+	})
+}
+
+func (db *DB) DescendKeys(pattern []byte, filterExpried bool, handleFn func(k []byte) (bool, error)) error {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+	var reg *regexp.Regexp
+	if len(pattern) > 0 {
+		var err error
+		reg, err = regexp.Compile(string(pattern))
+		if err != nil {
+			return err
+		}
+	}
+	db.index.Descend(func(key []byte, position *wal.ChunkPosition) (bool, error) {
+		if reg != nil && !reg.Match(key) {
+			return true, nil
+		}
+		if filterExpried {
+			chunk, err := db.dataFiles.Read(position)
+			if err != nil {
+				return false, nil
+			}
+			if value := db.checkValue(chunk); value == nil {
+				return true, nil
+			}
+		}
+		return handleFn(key)
+	})
+	return nil
+}
+
+func (db *DB) DescendKeysRange(startKey, endKey, pattern []byte, filterExpried bool, handleFn func(k []byte) (bool, error)) error {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+	var reg *regexp.Regexp
+	if len(pattern) > 0 {
+		var err error
+		reg, err = regexp.Compile(string(pattern))
+		if err != nil {
+			return err
+		}
+	}
+	db.index.DescendRange(startKey, endKey, func(key []byte, position *wal.ChunkPosition) (bool, error) {
+		if reg != nil && !reg.Match(key) {
+			return true, nil
+		}
+		if filterExpried {
+			chunk, err := db.dataFiles.Read(position)
+			if err != nil {
+				return false, nil
+			}
+			if value := db.checkValue(chunk); value == nil {
+				return true, nil
+			}
+		}
+		return handleFn(key)
+	})
+	return nil
+}
+
 func (db *DB) Ascend(handleFn func(k []byte, v []byte) (bool, error)) {
 	db.mtx.RLock()
 	defer db.mtx.RUnlock()
@@ -341,7 +448,7 @@ func (db *DB) Ascend(handleFn func(k []byte, v []byte) (bool, error)) {
 		if err != nil {
 			return false, err
 		}
-		if value := db.checkValue(chunk); err != nil {
+		if value := db.checkValue(chunk); value != nil {
 			return handleFn(key, value)
 		}
 		return true, nil
@@ -378,6 +485,64 @@ func (db *DB) AscendGreaterOrEqual(key []byte, handleFn func(k []byte, v []byte)
 		}
 		return true, nil
 	})
+}
+
+func (db *DB) AscendKeys(pattern []byte, filterExpried bool, handleFn func(k []byte) (bool, error)) error {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+	var reg *regexp.Regexp
+	if len(pattern) > 0 {
+		var err error
+		reg, err = regexp.Compile(string(pattern))
+		if err != nil {
+			return err
+		}
+	}
+	db.index.Ascend(func(key []byte, position *wal.ChunkPosition) (bool, error) {
+		if reg != nil && !reg.Match(key) {
+			return true, nil
+		}
+		if filterExpried {
+			chunk, err := db.dataFiles.Read(position)
+			if err != nil {
+				return false, nil
+			}
+			if value := db.checkValue(chunk); value == nil {
+				return true, nil
+			}
+		}
+		return handleFn(key)
+	})
+	return nil
+}
+
+func (db *DB) AscendKeysRange(startKey, endKey, pattern []byte, filterExpried bool, handleFn func(k []byte) (bool, error)) error {
+	db.mtx.RLock()
+	defer db.mtx.RUnlock()
+	var reg *regexp.Regexp
+	if len(pattern) > 0 {
+		var err error
+		reg, err = regexp.Compile(string(pattern))
+		if err != nil {
+			return err
+		}
+	}
+	db.index.AscendRange(startKey, endKey, func(key []byte, position *wal.ChunkPosition) (bool, error) {
+		if reg != nil && !reg.Match(key) {
+			return true, nil
+		}
+		if filterExpried {
+			chunk, err := db.dataFiles.Read(position)
+			if err != nil {
+				return false, nil
+			}
+			if value := db.checkValue(chunk); value == nil {
+				return true, nil
+			}
+		}
+		return handleFn(key)
+	})
+	return nil
 }
 
 // Close 关闭数据库
@@ -443,4 +608,55 @@ func (db *DB) Backup(dir string) error {
 	db.mtx.Lock()
 	defer db.mtx.Unlock()
 	return utils.CopyDir(db.options.DirPath, dir, []string{fileLockName})
+}
+
+func (db *DB) DeleteExpiredKeys(timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	done := make(chan struct{}, 1)
+
+	var innerErr error
+	now := time.Now().UnixNano()
+
+	go func(ctx context.Context) {
+		db.mtx.Lock()
+		defer db.mtx.Unlock()
+		for {
+			positions := make([]*wal.ChunkPosition, 0, 100)
+			db.index.AscendGreaterOrEqual(db.expiredCursorKey, func(key []byte, position *wal.ChunkPosition) (bool, error) {
+				positions = append(positions, position)
+				if len(positions) >= 100 {
+					return false, nil
+				}
+				return true, nil
+			})
+
+			if len(positions) == 0 {
+				db.expiredCursorKey = nil
+				done <- struct{}{}
+				return
+			}
+
+			for _, position := range positions {
+				chunk, err := db.dataFiles.Read(position)
+				if err != nil {
+					innerErr = err
+					done <- struct{}{}
+					return
+				}
+				record := data.DecodeLogRecord(chunk)
+				if record.IsExpired(now) {
+					db.index.Delete(record.Key)
+				}
+				db.expiredCursorKey = record.Key
+			}
+		}
+	}(ctx)
+
+	select {
+	case <-ctx.Done():
+		return innerErr
+	case <-done:
+		return innerErr
+	}
 }

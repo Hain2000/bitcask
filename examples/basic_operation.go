@@ -55,9 +55,9 @@ func destroyDB(db *bitcask.DB) {
 
 func main() {
 	options := bitcask.DefaultOptions
-	options.DirPath = "./test_tmp"
+	options.DirPath = "/home/chunyu/test_data/bitcask"
 	db, _ := bitcask.Open(options)
-	defer destroyDB(db)
+	// defer destroyDB(db)
 
 	kvs := make(map[string][]byte)
 	for i := 0; i < 100000; i++ {
@@ -67,7 +67,7 @@ func main() {
 		_ = db.Put(key, value)
 	}
 
-	if err := db.Merge(true); err != nil {
+	if err := db.Merge(false); err != nil {
 		fmt.Errorf("%+v\n", err) // 输出错误详情
 	}
 	fmt.Println("hello world")

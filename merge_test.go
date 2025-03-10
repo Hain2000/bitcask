@@ -50,6 +50,7 @@ func TestDB_Merge_2_All_Invalid(t *testing.T) {
 
 func TestDB_Merge_3_All_Valid(t *testing.T) {
 	options := DefaultOptions
+	options.DirPath = "./tmp_data"
 	db, err := Open(options)
 	assert.Nil(t, err)
 	defer destroyDB(db)
