@@ -64,7 +64,7 @@ func set(cli *BitcaskClient, args [][]byte) (interface{}, error) {
 	}
 
 	key, value := args[0], args[1]
-	if err := cli.db.Set(key, 0, value); err != nil {
+	if err := cli.db.Set(key, value, 0); err != nil {
 		return nil, err
 	}
 	return redcon.SimpleString("OK"), nil

@@ -3,9 +3,7 @@ package redis
 import (
 	"bitcask"
 	"bitcask/utils"
-	"encoding/binary"
 	"errors"
-	"time"
 )
 
 type redisType = byte
@@ -41,79 +39,27 @@ func (rds *DataStructure) findMetaData(key []byte, dataType redisType) (*metadat
 		return nil, err
 	}
 	var meta *metadata
-	var exist = true
-	if errors.Is(err, bitcask.ErrKeyNotFound) {
-		exist = false
-	} else {
-		meta = decodeMetaData(metaBuf)
-		// 还要判断数据类型
-		if meta.dataType != dataType {
-			// fmt.Println(meta.dataType)
-			return nil, ErrWrongTypeOperation
-		}
-		// 判断过去事件
-		if meta.expire != 0 && meta.expire <= time.Now().UnixNano() {
-			exist = false
-		}
+	meta = decodeMetaData(metaBuf)
+	// 还要判断数据类型
+	if meta.dataType != dataType {
+		// fmt.Println(meta.dataType)
+		return nil, ErrWrongTypeOperation
 	}
-	if !exist {
-		meta = &metadata{
-			dataType: dataType,
-			expire:   0,
-			version:  time.Now().UnixNano(),
-			size:     0,
-		}
-		if dataType == List {
-			meta.head = initialListMark
-			meta.tail = initialListMark
-		}
+
+	meta = &metadata{
+		dataType: dataType,
+		size:     0,
 	}
+	if dataType == List {
+		meta.head = initialListMark
+		meta.tail = initialListMark
+	}
+
 	return meta, nil
 }
 
 func (rds *DataStructure) Close() error {
 	return rds.db.Close()
-}
-
-// String -----------------------------------------------------------
-
-func (rds *DataStructure) Set(key []byte, ttl time.Duration, value []byte) error {
-	if value == nil {
-		return nil
-	}
-
-	buf := make([]byte, binary.MaxVarintLen64+1)
-	buf[0] = String
-	var index = 1
-	var expire int64 = 0
-	if ttl != 0 {
-		expire = time.Now().Add(ttl).UnixNano()
-	}
-	index += binary.PutVarint(buf[index:], expire)
-	encValue := make([]byte, index+len(value))
-	copy(encValue[:index], buf[:index])
-	copy(encValue[index:], value)
-	// 调用存储引擎接口写入
-	return rds.db.Put(key, encValue)
-}
-
-func (rds *DataStructure) Get(key []byte) ([]byte, error) {
-	encValue, err := rds.db.Get(key)
-	if err != nil {
-		return nil, err
-	}
-
-	dataType := encValue[0]
-	if dataType != String {
-		return nil, ErrWrongTypeOperation
-	}
-	var index = 1
-	expire, n := binary.Varint(encValue[index:])
-	index += n
-	if expire > 0 && expire <= time.Now().UnixNano() {
-		return nil, nil
-	}
-	return encValue[index:], nil
 }
 
 // Hash -----------------------------------------------------------
@@ -127,9 +73,8 @@ func (rds *DataStructure) HSet(key, field, value []byte) (bool, error) {
 
 	// 构造 Hash Key
 	hk := hashInternalKey{
-		key:     key,
-		version: meta.version,
-		filed:   field,
+		key:   key,
+		filed: field,
 	}
 	encKey := hk.encode()
 
@@ -163,9 +108,8 @@ func (rds *DataStructure) HGet(key, field []byte) ([]byte, error) {
 	}
 
 	hk := &hashInternalKey{
-		key:     key,
-		version: meta.version,
-		filed:   field,
+		key:   key,
+		filed: field,
 	}
 
 	return rds.db.Get(hk.encode())
@@ -181,9 +125,8 @@ func (rds *DataStructure) HDel(key, field []byte) (bool, error) {
 	}
 
 	hk := &hashInternalKey{
-		key:     key,
-		version: meta.version,
-		filed:   field,
+		key:   key,
+		filed: field,
 	}
 	encKey := hk.encode()
 
@@ -215,9 +158,8 @@ func (rds *DataStructure) SAdd(key, member []byte) (bool, error) {
 
 	// 构造数据部分的key
 	sk := &setInternalKey{
-		key:     key,
-		version: meta.version,
-		member:  member,
+		key:    key,
+		member: member,
 	}
 
 	var ok = false
@@ -248,9 +190,8 @@ func (rds *DataStructure) SIsMember(key, member []byte) (bool, error) {
 
 	// 构造数据部分的key
 	sk := &setInternalKey{
-		key:     key,
-		version: meta.version,
-		member:  member,
+		key:    key,
+		member: member,
 	}
 
 	_, err = rds.db.Get(sk.encode())
@@ -276,9 +217,8 @@ func (rds *DataStructure) SRem(key, member []byte) (bool, error) {
 
 	// 构造数据部分的key
 	sk := &setInternalKey{
-		key:     key,
-		version: meta.version,
-		member:  member,
+		key:    key,
+		member: member,
 	}
 
 	if _, err = rds.db.Get(sk.encode()); errors.Is(err, bitcask.ErrKeyNotFound) {
@@ -313,8 +253,7 @@ func (rds *DataStructure) pushInner(key, element []byte, isLeft bool) (uint32, e
 
 	//
 	lk := &listInternalKey{
-		key:     key,
-		version: meta.version,
+		key: key,
 	}
 	if isLeft {
 		lk.index = meta.head - 1
@@ -356,8 +295,7 @@ func (rds *DataStructure) popInner(key []byte, isLeft bool) ([]byte, error) {
 	}
 
 	lk := &listInternalKey{
-		key:     key,
-		version: meta.version,
+		key: key,
 	}
 	if isLeft {
 		lk.index = meta.head
@@ -392,10 +330,9 @@ func (rds *DataStructure) ZAdd(key []byte, score float64, member []byte) (bool, 
 	}
 
 	zk := &zsetInternalKey{
-		key:     key,
-		version: meta.version,
-		score:   score,
-		member:  member,
+		key:    key,
+		score:  score,
+		member: member,
 	}
 	var exist = true
 	// 查看是否已经存在了
@@ -422,10 +359,9 @@ func (rds *DataStructure) ZAdd(key []byte, score float64, member []byte) (bool, 
 
 	if exist {
 		oldKey := &zsetInternalKey{
-			key:     key,
-			version: meta.version,
-			member:  member,
-			score:   utils.FloatFromBytes(value),
+			key:    key,
+			member: member,
+			score:  utils.FloatFromBytes(value),
 		}
 		wb.Delete(oldKey.encodeWithScore())
 	}
@@ -448,9 +384,8 @@ func (rds *DataStructure) ZScore(key []byte, member []byte) (float64, error) {
 	}
 
 	zk := &zsetInternalKey{
-		key:     key,
-		version: meta.version,
-		member:  member,
+		key:    key,
+		member: member,
 	}
 
 	value, err := rds.db.Get(zk.encodeWithMember())

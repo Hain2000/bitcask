@@ -209,6 +209,17 @@ func checkOptions(options Options) error {
 	return nil
 }
 
+func (db *DB) GetBatch(rdonly bool) *Batch {
+	batch := db.batchPool.Get().(*Batch)
+	batch.init(rdonly, false, db)
+	return batch
+}
+
+func (db *DB) PutBatch(batch *Batch) {
+	batch.reset()
+	db.batchPool.Put(batch)
+}
+
 func (db *DB) Put(key []byte, value []byte) error {
 	batch := db.batchPool.Get().(*Batch)
 	defer func() {
