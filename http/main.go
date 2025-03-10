@@ -83,7 +83,7 @@ func handleListKeys(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
 	var res []string
 	for _, key := range keys {
-		res = append(res, string(key))
+		res = append(res, key)
 	}
 	json.NewEncoder(writer).Encode(res)
 }

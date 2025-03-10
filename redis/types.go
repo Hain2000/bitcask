@@ -139,7 +139,7 @@ func (rds *DataStructure) HSet(key, field, value []byte) (bool, error) {
 		exist = false
 	}
 
-	wb := rds.db.NewWriteBatch(bitcask.DefaultWriteBatchOptions)
+	wb := rds.db.NewBatch(bitcask.DefaultBatchOptions)
 
 	// 不存在则更新元数据
 	if !exist {
@@ -193,7 +193,7 @@ func (rds *DataStructure) HDel(key, field []byte) (bool, error) {
 	}
 
 	if exist {
-		wb := rds.db.NewWriteBatch(bitcask.DefaultWriteBatchOptions)
+		wb := rds.db.NewBatch(bitcask.DefaultBatchOptions)
 		meta.size--
 		wb.Put(key, meta.encode())
 		wb.Delete(encKey)
@@ -224,7 +224,7 @@ func (rds *DataStructure) SAdd(key, member []byte) (bool, error) {
 
 	if _, err = rds.db.Get(sk.encode()); errors.Is(err, bitcask.ErrKeyNotFound) {
 		// 不存在就更新
-		wb := rds.db.NewWriteBatch(bitcask.DefaultWriteBatchOptions)
+		wb := rds.db.NewBatch(bitcask.DefaultBatchOptions)
 		meta.size++
 		wb.Put(key, meta.encode())
 		wb.Put(sk.encode(), nil)
@@ -285,7 +285,7 @@ func (rds *DataStructure) SRem(key, member []byte) (bool, error) {
 		return false, nil
 	}
 
-	wb := rds.db.NewWriteBatch(bitcask.DefaultWriteBatchOptions)
+	wb := rds.db.NewBatch(bitcask.DefaultBatchOptions)
 	meta.size--
 	wb.Put(key, meta.encode())
 	wb.Delete(sk.encode())
@@ -323,7 +323,7 @@ func (rds *DataStructure) pushInner(key, element []byte, isLeft bool) (uint32, e
 	}
 
 	// 更新元数据和数据
-	wb := rds.db.NewWriteBatch(bitcask.DefaultWriteBatchOptions)
+	wb := rds.db.NewBatch(bitcask.DefaultBatchOptions)
 	meta.size++
 	if isLeft {
 		meta.head--
@@ -414,7 +414,7 @@ func (rds *DataStructure) ZAdd(key []byte, score float64, member []byte) (bool, 
 	}
 
 	// 更新元数据和数据
-	wb := rds.db.NewWriteBatch(bitcask.DefaultWriteBatchOptions)
+	wb := rds.db.NewBatch(bitcask.DefaultBatchOptions)
 	if !exist {
 		meta.size++
 		wb.Put(key, meta.encode())
