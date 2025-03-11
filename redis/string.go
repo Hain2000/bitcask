@@ -34,7 +34,7 @@ func (rds *DataStructure) Get(key []byte) ([]byte, error) {
 	return encValue[1:], nil
 }
 
-func (rds *DataStructure) MSet(values ...interface{}) error {
+func (rds *DataStructure) MSet(values []string) error {
 	if len(values)%2 != 0 {
 		return errors.New("mset operation requires even number of arguments")
 	}
@@ -42,8 +42,8 @@ func (rds *DataStructure) MSet(values ...interface{}) error {
 	defer rds.db.PutBatch(batch)
 	var errs []string
 	for i := 0; i < len(values); i += 2 {
-		k := values[i].([]byte)
-		v := values[i+1].([]byte)
+		k := []byte(values[i])
+		v := []byte(values[i+1])
 		encValue := make([]byte, 1+len(v))
 		encValue[0] = String
 		copy(encValue[1:], v)
@@ -62,28 +62,28 @@ func (rds *DataStructure) MSet(values ...interface{}) error {
 	return nil
 }
 
-func (rds *DataStructure) MGet(keys ...interface{}) ([][]byte, error) {
+func (rds *DataStructure) MGet(keys []string) ([]string, error) {
 	batch := rds.db.GetBatch(true)
 	defer func() {
 		_ = batch.Commit()
 		rds.db.PutBatch(batch)
 	}()
-	res := make([][]byte, 0)
+	res := make([]string, 0)
 	var errs []string
 	for i := 0; i < len(keys); i++ {
-		k := keys[i].([]byte)
+		k := []byte(keys[i])
 		encValue, err := batch.Get(k)
 		if err != nil {
 			if !errors.Is(err, bitcask.ErrKeyNotFound) {
 				errs = append(errs, fmt.Sprintf("error getting key %s: %v", k, err))
-				continue
 			}
+			continue
 		}
 		dataType := encValue[0]
 		if dataType != String {
 			continue
 		}
-		res = append(res, encValue[1:])
+		res = append(res, string(encValue[1:]))
 	}
 	if len(errs) > 0 {
 		return res, fmt.Errorf("multiple errors occurred: %s", strings.Join(errs, "; "))
