@@ -52,8 +52,9 @@ func TestString_MSetGet(t *testing.T) {
 
 	data := []string{"k1", "v1", "k2", "v2", "k3", "v3"}
 
-	err = rds.MSet(data)
+	n, err := rds.MSet(data)
 	assert.Nil(t, err)
+	assert.Equal(t, 3, n)
 
 	val, err := rds.Get([]byte("k2"))
 	assert.Nil(t, err)

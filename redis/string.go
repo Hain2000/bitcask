@@ -34,13 +34,14 @@ func (rds *DataStructure) Get(key []byte) ([]byte, error) {
 	return encValue[1:], nil
 }
 
-func (rds *DataStructure) MSet(values []string) error {
+func (rds *DataStructure) MSet(values []string) (int, error) {
 	if len(values)%2 != 0 {
-		return errors.New("mset operation requires even number of arguments")
+		return 0, errors.New("mset operation requires even number of arguments")
 	}
 	batch := rds.db.GetBatch(false)
 	defer rds.db.PutBatch(batch)
 	var errs []string
+	n := 0
 	for i := 0; i < len(values); i += 2 {
 		k := []byte(values[i])
 		v := []byte(values[i+1])
@@ -50,16 +51,19 @@ func (rds *DataStructure) MSet(values []string) error {
 		err := batch.Put(k, encValue)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("error getting key %s: %v", k, err))
+		} else {
+			n++
 		}
 	}
 	err := batch.Commit()
 	if err != nil {
+		n = 0
 		errs = append(errs, err.Error())
 	}
 	if len(errs) > 0 {
-		return errors.New(strings.Join(errs, "; "))
+		return n, errors.New(strings.Join(errs, "; "))
 	}
-	return nil
+	return n, nil
 }
 
 func (rds *DataStructure) MGet(keys []string) ([]string, error) {
