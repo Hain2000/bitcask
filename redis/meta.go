@@ -1,7 +1,6 @@
 package redis
 
 import (
-	"bitcask/utils"
 	"encoding/binary"
 	"math"
 )
@@ -58,68 +57,4 @@ func decodeMetaData(buf []byte) *metadata {
 		head:     head,
 		tail:     tail,
 	}
-}
-
-type setInternalKey struct {
-	key    []byte
-	member []byte
-}
-
-func (sk *setInternalKey) encode() []byte {
-	buf := make([]byte, len(sk.key)+len(sk.member)+8+4)
-	var index = 0
-	copy(buf[index:index+len(sk.key)], sk.key)
-	index += len(sk.key)
-
-	// member
-	copy(buf[index:index+len(sk.member)], sk.member)
-	index += len(sk.member)
-
-	// member size
-	binary.LittleEndian.PutUint32(buf[index:], uint32(len(sk.member)))
-
-	return buf
-}
-
-type zsetInternalKey struct {
-	key    []byte
-	member []byte
-	score  float64
-}
-
-func (zk *zsetInternalKey) encodeWithScore() []byte {
-	scoreBuf := utils.Float64ToBytes(zk.score)
-	buf := make([]byte, len(zk.key)+len(zk.member)+len(scoreBuf)+8+4)
-
-	// key
-	var index = 0
-	copy(buf[index:index+len(zk.key)], zk.key)
-	index += len(zk.key)
-
-	// score
-	copy(buf[index:index+len(scoreBuf)], scoreBuf)
-	index += len(scoreBuf)
-
-	// member
-	copy(buf[index:index+len(zk.member)], zk.member)
-	index += len(zk.member)
-
-	// member size
-	binary.LittleEndian.PutUint32(buf[index:], uint32(len(zk.member)))
-
-	return buf
-}
-
-func (zk *zsetInternalKey) encodeWithMember() []byte {
-	buf := make([]byte, len(zk.key)+len(zk.member)+8)
-
-	// key
-	var index = 0
-	copy(buf[index:index+len(zk.key)], zk.key)
-	index += len(zk.key)
-
-	// member
-	copy(buf[index:], zk.member)
-
-	return buf
 }
