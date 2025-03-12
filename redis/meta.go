@@ -81,24 +81,6 @@ func (sk *setInternalKey) encode() []byte {
 	return buf
 }
 
-type listInternalKey struct {
-	key   []byte
-	index uint64
-}
-
-func (lk *listInternalKey) encode() []byte {
-	buf := make([]byte, len(lk.key)+8+8)
-	// key
-	var index = 0
-	copy(buf[index:index+len(lk.key)], lk.key)
-	index += len(lk.key)
-
-	// index
-	binary.LittleEndian.PutUint64(buf[index:], lk.index)
-
-	return buf
-}
-
 type zsetInternalKey struct {
 	key    []byte
 	member []byte

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func close(rds *DataStructure, dir string) {
+func closeDB(rds *DataStructure, dir string) {
 	_ = rds.Close()
 	_ = os.RemoveAll(dir)
 }
@@ -19,7 +19,7 @@ func TestString_SetGet(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-setget")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 	err = rds.Set(utils.GetTestKey(1), utils.RandomValue(100), 0)
 	assert.Nil(t, err)
@@ -47,7 +47,7 @@ func TestString_MSetGet(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-msetget")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 
 	data := []string{"k1", "v1", "k2", "v2", "k3", "v3"}
@@ -75,7 +75,7 @@ func TestString_SetNx(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-msetget")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 
 	err = rds.Set([]byte("lcy"), []byte("qwq"), 0)

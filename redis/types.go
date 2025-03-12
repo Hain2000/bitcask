@@ -4,6 +4,7 @@ import (
 	"bitcask"
 	"bitcask/utils"
 	"errors"
+	"sync"
 )
 
 type redisType = byte
@@ -22,7 +23,9 @@ const (
 
 // DataStructure Redis数据结构服务
 type DataStructure struct {
-	db *bitcask.DB
+	db       *bitcask.DB
+	zsetLock sync.Mutex
+	listLock sync.Mutex
 }
 
 func NewRedisDataStructure(options bitcask.Options) (*DataStructure, error) {
@@ -30,7 +33,7 @@ func NewRedisDataStructure(options bitcask.Options) (*DataStructure, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DataStructure{db}, nil
+	return &DataStructure{db: db}, nil
 }
 
 func (rds *DataStructure) findMetaData(key []byte, dataType redisType) (*metadata, error) {
@@ -149,92 +152,6 @@ func (rds *DataStructure) SRem(key, member []byte) (bool, error) {
 		return false, err
 	}
 	return true, nil
-}
-
-// List ------------------------------------------------
-
-func (rds *DataStructure) LPush(key, element []byte) (uint32, error) {
-	return rds.pushInner(key, element, true)
-}
-
-func (rds *DataStructure) RPush(key, element []byte) (uint32, error) {
-	return rds.pushInner(key, element, false)
-}
-
-func (rds *DataStructure) pushInner(key, element []byte, isLeft bool) (uint32, error) {
-	meta, err := rds.findMetaData(key, List)
-	if err != nil {
-		return 0, err
-	}
-
-	//
-	lk := &listInternalKey{
-		key: key,
-	}
-	if isLeft {
-		lk.index = meta.head - 1
-	} else {
-		lk.index = meta.tail
-	}
-
-	// 更新元数据和数据
-	wb := rds.db.NewBatch(bitcask.DefaultBatchOptions)
-	meta.size++
-	if isLeft {
-		meta.head--
-	} else {
-		meta.tail++
-	}
-	wb.Put(key, meta.encode())
-	wb.Put(lk.encode(), element)
-	if err = wb.Commit(); err != nil {
-		return 0, err
-	}
-	return meta.size, nil
-}
-
-func (rds *DataStructure) LPop(key []byte) ([]byte, error) {
-	return rds.popInner(key, true)
-}
-
-func (rds *DataStructure) RPop(key []byte) ([]byte, error) {
-	return rds.popInner(key, false)
-}
-
-func (rds *DataStructure) popInner(key []byte, isLeft bool) ([]byte, error) {
-	meta, err := rds.findMetaData(key, List)
-	if err != nil {
-		return nil, err
-	}
-	if meta.size == 0 {
-		return nil, nil
-	}
-
-	lk := &listInternalKey{
-		key: key,
-	}
-	if isLeft {
-		lk.index = meta.head
-	} else {
-		lk.index = meta.tail - 1
-	}
-	element, err := rds.db.Get(lk.encode())
-	if err != nil {
-		return nil, err
-	}
-
-	// 更新元数据
-	meta.size--
-	if isLeft {
-		meta.head++
-	} else {
-		meta.tail--
-	}
-	if err = rds.db.Put(key, meta.encode()); err != nil {
-		return nil, err
-	}
-
-	return element, nil
 }
 
 // ZSet -----------------------------------------------------------

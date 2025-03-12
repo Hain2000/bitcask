@@ -32,7 +32,7 @@ func TestRedisDataStructure_HGet(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hget")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 
 	ok1, err := rds.HSet(utils.GetTestKey(1), []byte("field1"), utils.RandomValue(100))
@@ -66,7 +66,7 @@ func TestRedisDataStructure_HDel(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hdel")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 
 	del1, err := rds.HDel(utils.GetTestKey(200), nil)
@@ -95,7 +95,7 @@ func TestRedisDataStructure_HMSetGet(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hmsetget")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 	mp1 := map[string]string{
 		"field1": "value1",
@@ -135,7 +135,7 @@ func TestRedisDataStructure_HExist(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hmsetget")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 
 	exist1, err := rds.HExist([]byte("lcy"), []byte("f1"))
@@ -156,7 +156,7 @@ func TestRedisDataStructure_HKeysVals(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-kvs")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 
 	mp1 := map[string]string{
@@ -197,7 +197,7 @@ func TestRedisDataStructure_HIncrBy(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hincr")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 	x, err := rds.HIncrBy([]byte("lcy"), []byte("f1"), 1)
 	assert.Nil(t, err)
@@ -212,7 +212,7 @@ func TestRedisDataStructure_HSetNX(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hsetnx")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
-	defer close(rds, dir)
+	defer closeDB(rds, dir)
 	assert.Nil(t, err)
 
 	mp1 := map[string]string{
