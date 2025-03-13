@@ -22,9 +22,10 @@ const (
 
 // DataStructure Redis数据结构服务
 type DataStructure struct {
-	db       *bitcask.DB
-	zsetLock sync.Mutex
-	listLock sync.Mutex
+	db         *bitcask.DB
+	listLock   sync.Mutex
+	globalLock sync.Mutex
+	keyRWLocks map[string]*sync.RWMutex
 }
 
 func NewRedisDataStructure(options bitcask.Options) (*DataStructure, error) {
@@ -32,7 +33,8 @@ func NewRedisDataStructure(options bitcask.Options) (*DataStructure, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DataStructure{db: db}, nil
+	keyRWLocks := make(map[string]*sync.RWMutex)
+	return &DataStructure{db: db, keyRWLocks: keyRWLocks}, nil
 }
 
 func (rds *DataStructure) findMetaData(key []byte, dataType redisType) (*metadata, error) {
@@ -63,4 +65,20 @@ func (rds *DataStructure) findMetaData(key []byte, dataType redisType) (*metadat
 
 func (rds *DataStructure) Close() error {
 	return rds.db.Close()
+}
+
+func adjustRangeIndices(start, end, size int) (int, int) {
+	if start < 0 {
+		start += size
+	}
+	if end < 0 {
+		end += size
+	}
+	if start < 0 {
+		start = 0
+	}
+	if end >= size {
+		end = size - 1
+	}
+	return start, end
 }

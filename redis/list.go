@@ -122,18 +122,7 @@ func (rds *DataStructure) LRange(key []byte, start, end int) ([]string, error) {
 		return []string{}, nil
 	}
 	size := int(meta.size)
-	if start < 0 {
-		start = size + start
-	}
-	if end < 0 {
-		end = size + end
-	}
-	if start < 0 {
-		start = 0
-	}
-	if end >= size {
-		end = size - 1
-	}
+	start, end = adjustRangeIndices(start, end, size)
 	if start > end {
 		return []string{}, nil
 	}
@@ -188,18 +177,7 @@ func (rds *DataStructure) LTrim(key []byte, start, end int) error {
 		return nil
 	}
 	size := int(meta.size)
-	if start < 0 {
-		start = size + start
-	}
-	if end < 0 {
-		end = size + end
-	}
-	if start < 0 {
-		start = 0
-	}
-	if end >= size {
-		end = size - 1
-	}
+	start, end = adjustRangeIndices(start, end, size)
 	if start > end { // 全删了
 		meta.size = 0
 		meta.head = initialListMark
@@ -316,7 +294,6 @@ func (rds *DataStructure) LInsert(key, refvalue, value []byte, before bool) (boo
 		return false, err
 	}
 	if err = batch.Commit(); err != nil {
-		_ = batch.Rollback()
 		return false, err
 	}
 	return true, nil
