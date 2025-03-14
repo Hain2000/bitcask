@@ -42,6 +42,8 @@ func decodeMember(buf, key []byte) []byte {
 // Set -----------------------------------------------------------
 
 func (rds *DataStructure) SAdd(key, member []byte) (bool, error) {
+	unlock := rds.keyRWLocks.Lock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {
 		return false, err
@@ -52,9 +54,7 @@ func (rds *DataStructure) SAdd(key, member []byte) (bool, error) {
 		key:    key,
 		member: member,
 	}
-
 	var ok = false
-
 	if _, err = rds.db.Get(sk.encode()); errors.Is(err, bitcask.ErrKeyNotFound) {
 		// 不存在就更新
 		batch := rds.db.GetBatch(false)
@@ -77,6 +77,8 @@ func (rds *DataStructure) SAdd(key, member []byte) (bool, error) {
 }
 
 func (rds *DataStructure) SIsMember(key, member []byte) (bool, error) {
+	unlock := rds.keyRWLocks.RLock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {
 		return false, err
@@ -104,6 +106,8 @@ func (rds *DataStructure) SIsMember(key, member []byte) (bool, error) {
 }
 
 func (rds *DataStructure) SRem(key, member []byte) (bool, error) {
+	unlock := rds.keyRWLocks.Lock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {
 		return false, err
@@ -141,6 +145,8 @@ func (rds *DataStructure) SRem(key, member []byte) (bool, error) {
 }
 
 func (rds *DataStructure) SCard(key []byte) (uint32, error) {
+	unlock := rds.keyRWLocks.RLock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {
 		return 0, err
@@ -149,6 +155,8 @@ func (rds *DataStructure) SCard(key []byte) (uint32, error) {
 }
 
 func (rds *DataStructure) SMembers(key []byte) ([]string, error) {
+	unlock := rds.keyRWLocks.RLock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {
 		return nil, err

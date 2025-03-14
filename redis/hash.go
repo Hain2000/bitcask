@@ -48,6 +48,8 @@ func decodeFiled(buf, key []byte) []byte {
 
 // HSet 返回bool表示操作有没有成功
 func (rds *DataStructure) HSet(key, field, value []byte) (bool, error) {
+	unlock := rds.keyRWLocks.Lock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Hash)
 	if err != nil {
 		return false, err
@@ -95,6 +97,8 @@ func (rds *DataStructure) HSet(key, field, value []byte) (bool, error) {
 }
 
 func (rds *DataStructure) HGet(key, field []byte) ([]byte, error) {
+	unlock := rds.keyRWLocks.RLock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Hash)
 	if err != nil {
 		return nil, err
@@ -111,6 +115,8 @@ func (rds *DataStructure) HGet(key, field []byte) ([]byte, error) {
 }
 
 func (rds *DataStructure) HDel(key, field []byte) (bool, error) {
+	unlock := rds.keyRWLocks.Lock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Hash)
 	if err != nil {
 		return false, err
@@ -201,6 +207,8 @@ func (rds *DataStructure) HMGet(key []byte, fields ...string) (map[string]string
 }
 
 func (rds *DataStructure) HExist(key, field []byte) (bool, error) {
+	unlock := rds.keyRWLocks.RLock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Hash)
 	if err != nil {
 		return false, err
@@ -216,6 +224,8 @@ func (rds *DataStructure) HExist(key, field []byte) (bool, error) {
 }
 
 func (rds *DataStructure) HKeys(key []byte) ([]string, error) {
+	unlock := rds.keyRWLocks.RLock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, Hash)
 	if err != nil {
 		return nil, err
@@ -281,7 +291,9 @@ func (rds *DataStructure) HIncrBy(key, field []byte, incr int64) (int64, error) 
 }
 
 func (rds *DataStructure) HSetNX(key, field, value []byte) (bool, error) {
+	unlock := rds.keyRWLocks.RLock(key)
 	meta, err := rds.findMetaData(key, Hash)
+	unlock()
 	if err != nil {
 		return false, err
 	}
@@ -293,6 +305,8 @@ func (rds *DataStructure) HSetNX(key, field, value []byte) (bool, error) {
 		return false, nil
 	}
 
+	unlock = rds.keyRWLocks.Lock(key)
+	defer unlock()
 	// key field 字段
 	hk := hashInternalKey{
 		key:   key,

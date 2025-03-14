@@ -20,12 +20,31 @@ const (
 	ZSet
 )
 
+type KeyRWLock struct {
+	locks sync.Map // map[string]*sync.RWMutex
+}
+
+func (krwl *KeyRWLock) RLock(key []byte) func() {
+	k := string(key)
+	actual, _ := krwl.locks.LoadOrStore(k, &sync.RWMutex{})
+	rw := actual.(*sync.RWMutex)
+	rw.RLock()
+	return func() { rw.RUnlock() }
+}
+
+func (krwl *KeyRWLock) Lock(key []byte) func() {
+	k := string(key)
+	actual, _ := krwl.locks.LoadOrStore(k, &sync.RWMutex{})
+	rw := actual.(*sync.RWMutex)
+	rw.Lock()
+	return func() { rw.Unlock() }
+}
+
 // DataStructure Redis数据结构服务
 type DataStructure struct {
 	db         *bitcask.DB
 	listLock   sync.Mutex
-	globalLock sync.Mutex
-	keyRWLocks map[string]*sync.RWMutex
+	keyRWLocks KeyRWLock
 }
 
 func NewRedisDataStructure(options bitcask.Options) (*DataStructure, error) {
@@ -33,8 +52,7 @@ func NewRedisDataStructure(options bitcask.Options) (*DataStructure, error) {
 	if err != nil {
 		return nil, err
 	}
-	keyRWLocks := make(map[string]*sync.RWMutex)
-	return &DataStructure{db: db, keyRWLocks: keyRWLocks}, nil
+	return &DataStructure{db: db}, nil
 }
 
 func (rds *DataStructure) findMetaData(key []byte, dataType redisType) (*metadata, error) {

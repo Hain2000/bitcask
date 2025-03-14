@@ -35,6 +35,8 @@ func (rds *DataStructure) RPush(key, element []byte) (uint32, error) {
 }
 
 func (rds *DataStructure) pushInner(key, element []byte, isLeft bool) (uint32, error) {
+	unlock := rds.keyRWLocks.Lock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, List)
 	if err != nil {
 		return 0, err
@@ -78,6 +80,8 @@ func (rds *DataStructure) RPop(key []byte) ([]byte, error) {
 }
 
 func (rds *DataStructure) popInner(key []byte, isLeft bool) ([]byte, error) {
+	unlock := rds.keyRWLocks.Lock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, List)
 	if err != nil {
 		return nil, err
@@ -114,6 +118,8 @@ func (rds *DataStructure) popInner(key []byte, isLeft bool) ([]byte, error) {
 }
 
 func (rds *DataStructure) LRange(key []byte, start, end int) ([]string, error) {
+	unlock := rds.keyRWLocks.RLock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, List)
 	if err != nil {
 		return nil, err
@@ -169,6 +175,8 @@ func (rds *DataStructure) LRange(key []byte, start, end int) ([]string, error) {
 }
 
 func (rds *DataStructure) LTrim(key []byte, start, end int) error {
+	unlock := rds.keyRWLocks.Lock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, List)
 	if err != nil {
 		return err
@@ -192,6 +200,8 @@ func (rds *DataStructure) LTrim(key []byte, start, end int) error {
 }
 
 func (rds *DataStructure) LLen(key []byte) (int, error) {
+	unlock := rds.keyRWLocks.RLock(key)
+	defer unlock()
 	meta, err := rds.findMetaData(key, List)
 	if err != nil {
 		return 0, err
@@ -240,6 +250,7 @@ func (rds *DataStructure) BRPop(key []byte, ttl time.Duration) ([]byte, error) {
 
 // LInsert 遇到的第一个refvalue插入
 func (rds *DataStructure) LInsert(key, refvalue, value []byte, before bool) (bool, error) {
+	unlock := rds.keyRWLocks.RLock(key)
 	meta, err := rds.findMetaData(key, List)
 	if err != nil {
 		return false, err
@@ -247,7 +258,10 @@ func (rds *DataStructure) LInsert(key, refvalue, value []byte, before bool) (boo
 	if meta.size == 0 {
 		return false, err
 	}
+	unlock()
 	vals, err := rds.LRange(key, 0, -1)
+	unlock = rds.keyRWLocks.Lock(key)
+	defer unlock()
 	if err != nil {
 		return false, err
 	}

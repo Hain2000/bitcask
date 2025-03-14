@@ -1,6 +1,6 @@
 ## 未来计划：
 - [ ] redis
-  - [ ] concurrency
+  - [x] concurrency
   - [ ] client & server
 - [ ] cluster
   - [ ] raft
