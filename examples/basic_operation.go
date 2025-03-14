@@ -43,55 +43,54 @@ func decodeFiled(buf, key []byte) []byte {
 	return filed
 }
 
-func close(rds *redis.DataStructure, dir string) {
+func closeDB(rds *redis.DataStructure, dir string) {
 	_ = rds.Close()
 	_ = os.RemoveAll(dir)
 }
 
-func main() {
+func test1() {
 	options := bitcask.DefaultOptions
 	options.DirPath = "./test_tmp"
-	//db, _ := bitcask.Open(options)
-	//defer destroyDB(db)
-	//
-	//f1 := []string{"yyds1", "yyds2", "yyds3", "yyds4", "yyds5"}
-	//v1 := []string{"v1", "v2", "v3", "v4", "v5"}
-	//for i := 0; i < 5; i++ {
-	//	hk := &hashInternalKey{
-	//		key:   []byte("lcy"),
-	//		filed: []byte(f1[i]),
-	//	}
-	//	_ = db.Put(hk.encode(), []byte(v1[i]))
-	//}
-	//
-	//var keys []string
-	//err := db.AscendKeys([]byte("lcy"), true, func(k []byte) (bool, error) {
-	//	ff := decodeFiled(k, []byte("lcy"))
-	//	if ff != nil {
-	//		keys = append(keys, string(ff))
-	//	}
-	//	return true, nil
-	//})
-	//if err != nil {
-	//	panic(err)
-	//}
-	//fmt.Println(keys)
-
-	rds, _ := redis.NewRedisDataStructure(options)
-	defer close(rds, options.DirPath)
-	mp1 := map[string]string{
-		"field1": "value1",
-		"field2": "value2",
-		"field3": "value3",
-	}
-	_, err := rds.HMSet([]byte("lcy"), mp1)
+	rds, err := redis.NewRedisDataStructure(options)
 	if err != nil {
 		panic(err)
 	}
+	defer closeDB(rds, options.DirPath)
+	test_data := map[string]float64{
+		"aa":  3,
+		"bb":  2,
+		"cc":  7,
+		"dd":  8,
+		"ee":  1,
+		"ff":  10,
+		"aaa": 4,
+		"aab": 3,
+	}
 
-	keys, err := rds.HKeys([]byte("lcy"))
+	for k, v := range test_data {
+		_, err := rds.ZAdd([]byte("lcy"), v, []byte(k))
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	n, err := rds.ZCard([]byte("lcy"))
+	fmt.Println(n)
+
+	s, err := rds.ZRange([]byte("lcy"), 0, -1, true)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(keys)
+	fmt.Println(s)
+}
+
+func main() {
+	test1()
+	//val := -123.456
+	//bytes := utils.Float64ToBytes(val)
+	//fmt.Println("Encoded bytes:", bytes) // 打印字节数组
+	//fmt.Println(len(bytes))
+	//decoded := utils.BytesToFloat64(bytes)
+	//fmt.Println("Decoded float64:", decoded) // 输出应为 -123.456
+
 }

@@ -16,8 +16,8 @@ type zsetInternalKey struct {
 }
 
 func (zk *zsetInternalKey) encodeWithScore() []byte {
-	scoreBuf := utils.Float64ToBytes(zk.score)
-	buf := make([]byte, len(zk.key)+len(zk.member)+len(scoreBuf)+4)
+	scoreBuf := utils.EncodeFloat64ForBTree(zk.score)
+	buf := make([]byte, len(zk.key)+len(zk.member)+8+4)
 
 	// key
 	var index = 0
@@ -25,8 +25,8 @@ func (zk *zsetInternalKey) encodeWithScore() []byte {
 	index += len(zk.key)
 
 	// score
-	copy(buf[index:index+len(scoreBuf)], scoreBuf)
-	index += len(scoreBuf)
+	copy(buf[index:index+8], scoreBuf)
+	index += 8
 
 	// member
 	copy(buf[index:index+len(zk.member)], zk.member)
@@ -54,9 +54,6 @@ func decodeZSetInternalKey(key, internalKey []byte) ([]byte, []byte) {
 	memberLen := binary.LittleEndian.Uint32(memberSizeBytes)
 	memberStart := len(key) + 8
 	memberEnd := memberStart + int(memberLen)
-	if memberEnd > len(internalKey)-4 {
-		return nil, nil
-	}
 	member := make([]byte, memberLen)
 	copy(member, internalKey[memberStart:memberEnd])
 	return scoreBytes, member
@@ -86,7 +83,7 @@ func (rds *DataStructure) ZAdd(key []byte, score float64, member []byte) (bool, 
 	}
 
 	if exist {
-		if score == utils.FloatFromBytes(value) {
+		if score == utils.DecodeFloat64FromBTree(value) {
 			return false, nil
 		}
 	}
@@ -106,14 +103,14 @@ func (rds *DataStructure) ZAdd(key []byte, score float64, member []byte) (bool, 
 		oldKey := &zsetInternalKey{
 			key:    key,
 			member: member,
-			score:  utils.FloatFromBytes(value),
+			score:  utils.DecodeFloat64FromBTree(value),
 		}
 		if err = batch.Delete(oldKey.encodeWithScore()); err != nil {
 			_ = batch.Rollback()
 			return false, err
 		}
 	}
-	if err = batch.Put(zk.encodeWithMember(), utils.Float64ToBytes(score)); err != nil {
+	if err = batch.Put(zk.encodeWithMember(), utils.EncodeFloat64ForBTree(score)); err != nil {
 		_ = batch.Rollback()
 		return false, err
 	}
@@ -124,7 +121,7 @@ func (rds *DataStructure) ZAdd(key []byte, score float64, member []byte) (bool, 
 	if err = batch.Commit(); err != nil {
 		return false, err
 	}
-	return !exist, nil
+	return true, nil
 }
 
 func (rds *DataStructure) ZRem(key, member []byte) (bool, error) {
@@ -193,7 +190,7 @@ func (rds *DataStructure) ZScore(key []byte, member []byte) (float64, error) {
 		return math.Inf(-1), err
 	}
 
-	return utils.FloatFromBytes(value), nil
+	return utils.DecodeFloat64FromBTree(value), nil
 }
 
 func (rds *DataStructure) ZCard(key []byte) (uint32, error) {
@@ -234,15 +231,15 @@ func (rds *DataStructure) ZRange(key []byte, start, end int, withScores bool) ([
 			continue
 		}
 		// 排除 key + member 的字段，留下key + scoreBuf(8) + member + len_member(4)
-		if item.Value != nil {
+		if len(item.Value) != 0 {
 			continue
 		}
 
-		score, member := decodeZSetInternalKey(key, item.Value)
+		score, member := decodeZSetInternalKey(key, item.Key)
 		if count >= start && count <= end {
 			res = append(res, string(member))
 			if withScores {
-				res = append(res, string(score))
+				res = append(res, string(utils.DecodeFloat64FromBTreeToBytes(score)))
 			}
 		}
 
@@ -277,17 +274,21 @@ func (rds *DataStructure) ZRangeByScore(key []byte, min, max float64, rev, withS
 			continue
 		}
 		// 排除 key + member 的字段，留下key + scoreBuf(8) + member + len_member(4)
-		if item.Value != nil {
+		if len(item.Value) != 0 {
 			continue
 		}
-		scoreBytes, member := decodeZSetInternalKey(key, item.Value)
-		score := utils.FloatFromBytes(scoreBytes)
+		scoreBytes, member := decodeZSetInternalKey(key, item.Key)
+		score := utils.DecodeFloat64FromBTree(scoreBytes)
 		if min <= score && score <= max {
 			res = append(res, string(member))
 			if withScores {
-				res = append(res, string(scoreBytes))
+				res = append(res, string(utils.DecodeFloat64FromBTreeToBytes(scoreBytes)))
 			}
 		}
+	}
+	if withScores {
+		count += count
+		offset += offset
 	}
 	res = res[offset:]
 	if count != 0 {
@@ -315,11 +316,11 @@ func (rds *DataStructure) ZRank(key, member []byte, rev bool) (int, error) {
 		if !bytes.HasPrefix(item.Key, key) {
 			continue
 		}
-		if item.Value != nil {
+		if len(item.Value) != 0 {
 			continue
 		}
-		curScoreBytes, curMember := decodeZSetInternalKey(key, item.Value)
-		curScore := utils.FloatFromBytes(curScoreBytes)
+		curScoreBytes, curMember := decodeZSetInternalKey(key, item.Key)
+		curScore := utils.DecodeFloat64FromBTree(curScoreBytes)
 		if curScore < score {
 			rank++
 		} else if curScore == score {

@@ -60,6 +60,13 @@ func (it *Iterator) Valid() bool {
 	return it.indexIter.Valid()
 }
 
+func (it *Iterator) Key() []byte {
+	if it.db == nil || it.indexIter == nil || !it.Valid() {
+		return nil
+	}
+	return it.indexIter.Key()
+}
+
 func (it *Iterator) Item() *Item {
 	if it.db == nil || it.indexIter == nil || !it.Valid() {
 		return nil
