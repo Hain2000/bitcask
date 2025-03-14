@@ -3,13 +3,13 @@ package redis
 import "errors"
 
 func (rds *DataStructure) Del(key []byte) error {
-	unlock := rds.keyRWLocks.Lock(key)
+	unlock := rds.keyRWLocks.lock(key)
 	defer unlock()
 	return rds.db.Delete(key)
 }
 
 func (rds *DataStructure) Type(key []byte) (redisType, error) {
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	encValue, err := rds.db.Get(key)
 	if err != nil {

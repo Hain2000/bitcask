@@ -42,7 +42,7 @@ func decodeMember(buf, key []byte) []byte {
 // Set -----------------------------------------------------------
 
 func (rds *DataStructure) SAdd(key, member []byte) (bool, error) {
-	unlock := rds.keyRWLocks.Lock(key)
+	unlock := rds.keyRWLocks.lock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {
@@ -77,7 +77,7 @@ func (rds *DataStructure) SAdd(key, member []byte) (bool, error) {
 }
 
 func (rds *DataStructure) SIsMember(key, member []byte) (bool, error) {
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {
@@ -106,7 +106,7 @@ func (rds *DataStructure) SIsMember(key, member []byte) (bool, error) {
 }
 
 func (rds *DataStructure) SRem(key, member []byte) (bool, error) {
-	unlock := rds.keyRWLocks.Lock(key)
+	unlock := rds.keyRWLocks.lock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {
@@ -145,7 +145,7 @@ func (rds *DataStructure) SRem(key, member []byte) (bool, error) {
 }
 
 func (rds *DataStructure) SCard(key []byte) (uint32, error) {
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {
@@ -155,7 +155,7 @@ func (rds *DataStructure) SCard(key []byte) (uint32, error) {
 }
 
 func (rds *DataStructure) SMembers(key []byte) ([]string, error) {
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, Set)
 	if err != nil {

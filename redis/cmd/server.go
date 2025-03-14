@@ -51,6 +51,6 @@ func (svr *BitcaskServer) accept(conn redcon.Conn) bool {
 
 func (svr *BitcaskServer) close(conn redcon.Conn, err error) {
 	for _, db := range svr.dbs {
-		db.Close()
+		_ = db.Close()
 	}
 }

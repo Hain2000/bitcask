@@ -20,11 +20,11 @@ const (
 	ZSet
 )
 
-type KeyRWLock struct {
+type keyRWLock struct {
 	locks sync.Map // map[string]*sync.RWMutex
 }
 
-func (krwl *KeyRWLock) RLock(key []byte) func() {
+func (krwl *keyRWLock) rlock(key []byte) func() {
 	k := string(key)
 	actual, _ := krwl.locks.LoadOrStore(k, &sync.RWMutex{})
 	rw := actual.(*sync.RWMutex)
@@ -32,7 +32,7 @@ func (krwl *KeyRWLock) RLock(key []byte) func() {
 	return func() { rw.RUnlock() }
 }
 
-func (krwl *KeyRWLock) Lock(key []byte) func() {
+func (krwl *keyRWLock) lock(key []byte) func() {
 	k := string(key)
 	actual, _ := krwl.locks.LoadOrStore(k, &sync.RWMutex{})
 	rw := actual.(*sync.RWMutex)
@@ -44,7 +44,7 @@ func (krwl *KeyRWLock) Lock(key []byte) func() {
 type DataStructure struct {
 	db         *bitcask.DB
 	listLock   sync.Mutex
-	keyRWLocks KeyRWLock
+	keyRWLocks keyRWLock
 }
 
 func NewRedisDataStructure(options bitcask.Options) (*DataStructure, error) {
