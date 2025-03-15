@@ -1,17 +1,16 @@
-package protocol
+package resp
 
 import (
-	"bitcask/protocol/resp"
 	"bitcask/redis"
 	"github.com/tidwall/redcon"
 )
 
 type Server struct {
-	handler *resp.Handler
+	handler *Handler
 }
 
 func NewServer(store *redis.DataStructure) *Server {
-	return &Server{handler: resp.NewHandler(store)}
+	return &Server{handler: NewHandler(store)}
 }
 
 func (s *Server) Start(addr string) error {

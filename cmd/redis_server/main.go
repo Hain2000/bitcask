@@ -2,7 +2,7 @@ package main
 
 import (
 	"bitcask"
-	"bitcask/protocol"
+	"bitcask/protocol/resp"
 	bitcaskredis "bitcask/redis"
 	"log"
 )
@@ -14,7 +14,7 @@ func main() {
 	}
 	defer store.Close()
 
-	server := protocol.NewServer(store)
+	server := resp.NewServer(store)
 	log.Println("Server running at :6379")
 	if err := server.Start(":6379"); err != nil {
 		log.Fatal(err)

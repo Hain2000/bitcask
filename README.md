@@ -1,11 +1,12 @@
 ## 未来计划：
-- [ ] redis
+- [x] redis
   - [x] concurrency
   - [x] server
   - [x] server handler
 - [ ] cluster
-  - [ ] raft
-    - [ ] fsm
-    - [ ] log_store
+  - [x] raft
+    - [x] fsm
+    - [x] node
+    - [ ] http server
     - [ ] handler
-  - [ ] manager
+	- [ ] docker-compose
