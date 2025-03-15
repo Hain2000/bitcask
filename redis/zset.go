@@ -62,7 +62,7 @@ func decodeZSetInternalKey(key, internalKey []byte) ([]byte, []byte) {
 // ZSet -----------------------------------------------------------
 
 func (rds *DataStructure) ZAdd(key []byte, score float64, member []byte) (bool, error) {
-	unlock := rds.keyRWLocks.Lock(key)
+	unlock := rds.keyRWLocks.lock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, ZSet)
 	if err != nil {
@@ -127,7 +127,7 @@ func (rds *DataStructure) ZAdd(key []byte, score float64, member []byte) (bool, 
 }
 
 func (rds *DataStructure) ZRem(key, member []byte) (bool, error) {
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	meta, err := rds.findMetaData(key, ZSet)
 	unlock()
 	if err != nil { // 暂时不支持
@@ -138,7 +138,7 @@ func (rds *DataStructure) ZRem(key, member []byte) (bool, error) {
 	}
 
 	score, err := rds.ZScore(key, member)
-	unlock = rds.keyRWLocks.Lock(key)
+	unlock = rds.keyRWLocks.lock(key)
 	defer unlock()
 	if err != nil {
 		if errors.Is(err, bitcask.ErrKeyNotFound) {
@@ -177,7 +177,7 @@ func (rds *DataStructure) ZRem(key, member []byte) (bool, error) {
 }
 
 func (rds *DataStructure) ZScore(key []byte, member []byte) (float64, error) {
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, ZSet)
 	if err != nil { // 暂时不支持
@@ -202,7 +202,7 @@ func (rds *DataStructure) ZScore(key []byte, member []byte) (float64, error) {
 }
 
 func (rds *DataStructure) ZCard(key []byte) (uint32, error) {
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, ZSet)
 	if err != nil {
@@ -215,7 +215,7 @@ func (rds *DataStructure) ZCard(key []byte) (uint32, error) {
 }
 
 func (rds *DataStructure) ZRange(key []byte, start, end int, withScores bool) ([]string, error) {
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, ZSet)
 	if err != nil {
@@ -264,7 +264,7 @@ func (rds *DataStructure) ZRange(key []byte, start, end int, withScores bool) ([
 }
 
 func (rds *DataStructure) ZRangeByScore(key []byte, min, max float64, rev, withScores bool, offset, count int) ([]string, error) {
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, ZSet)
 	if err != nil {
@@ -313,7 +313,7 @@ func (rds *DataStructure) ZRangeByScore(key []byte, min, max float64, rev, withS
 
 func (rds *DataStructure) ZRank(key, member []byte, rev bool) (int, error) {
 	score, err := rds.ZScore(key, member)
-	unlock := rds.keyRWLocks.RLock(key)
+	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	if err != nil || score == math.Inf(-1) {
 		return -1, err

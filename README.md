@@ -1,9 +1,11 @@
 ## 未来计划：
 - [ ] redis
   - [x] concurrency
-  - [ ] client & server
+  - [x] server
+  - [ ] server handler
 - [ ] cluster
   - [ ] raft
-  - [ ] fsm
-  - [ ] server handler
-  - [ ] command
+    - [ ] fsm
+    - [ ] log_store
+    - [ ] handler
+  - [ ] manager

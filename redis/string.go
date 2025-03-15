@@ -27,6 +27,9 @@ func (rds *DataStructure) Get(key []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(encValue) == 0 {
+		return nil, fmt.Errorf("empty value")
+	}
 	dataType := encValue[0]
 	if dataType != String {
 		return nil, ErrWrongTypeOperation
@@ -95,26 +98,53 @@ func (rds *DataStructure) MGet(keys []string) ([]string, error) {
 	return res, nil
 }
 
+func isValidNumber(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+	for i, c := range data {
+		if i == 0 && (c == '+' || c == '-') {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func (rds *DataStructure) IncrBy(key []byte, value int64) (int64, error) {
-	val, err := rds.db.Get(key)
+	currentVal, err := rds.Get(key) // 使用上层Get方法
 	if err != nil {
 		if errors.Is(err, bitcask.ErrKeyNotFound) {
-			if err := rds.db.Put(key, []byte(strconv.FormatInt(value, 10))); err != nil {
+			// 使用Set方法确保正确编码
+			newVal := []byte(strconv.FormatInt(value, 10))
+			if err := rds.Set(key, newVal, 0); err != nil {
 				return 0, err
 			}
 			return value, nil
 		}
 		return 0, err
 	}
-	current, err := strconv.ParseInt(string(val), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("value is not an integer")
+
+	// 类型检查（确保是字符串类型）
+	if !isValidNumber(currentVal) {
+		return 0, ErrWrongTypeOperation
 	}
-	res := current + value
-	if err := rds.db.Put(key, []byte(strconv.FormatInt(res, 10))); err != nil {
+
+	current, err := strconv.ParseInt(string(currentVal), 10, 64)
+	if err != nil {
+		return 0, ErrWrongTypeOperation
+	}
+
+	newValue := current + value
+	newValBytes := []byte(strconv.FormatInt(newValue, 10))
+
+	// 使用Set方法更新值
+	if err := rds.Set(key, newValBytes, 0); err != nil {
 		return 0, err
 	}
-	return res, nil
+	return newValue, nil
 }
 
 func (rds *DataStructure) Incr(key []byte) (int64, error) {
@@ -125,14 +155,14 @@ func (rds *DataStructure) Decr(key []byte) (int64, error) {
 	return rds.IncrBy(key, -1)
 }
 
-func (rds *DataStructure) SetNX(key []byte, value []byte) error {
+func (rds *DataStructure) SetNX(key []byte, value []byte) (bool, error) {
 	var exist bool
 	var err error
 	if exist, err = rds.db.Exist(key); err != nil {
-		return err
+		return false, err
 	}
 	if exist {
-		return nil
+		return false, nil
 	}
-	return rds.Set(key, value, 0)
+	return true, rds.Set(key, value, 0)
 }
