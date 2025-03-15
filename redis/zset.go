@@ -214,7 +214,7 @@ func (rds *DataStructure) ZCard(key []byte) (uint32, error) {
 	return meta.size, nil
 }
 
-func (rds *DataStructure) ZRange(key []byte, start, end int, withScores bool) ([]string, error) {
+func (rds *DataStructure) ZRange(key []byte, start, end int, rev, withScores bool) ([]string, error) {
 	unlock := rds.keyRWLocks.rlock(key)
 	defer unlock()
 	meta, err := rds.findMetaData(key, ZSet)
@@ -231,6 +231,9 @@ func (rds *DataStructure) ZRange(key []byte, start, end int, withScores bool) ([
 	}
 
 	iterOptions := bitcask.DefaultIteratorOptions
+	if rev {
+		iterOptions.Reverse = true
+	}
 	iterOptions.Prefix = key
 	iter := rds.db.NewIterator(iterOptions)
 	defer iter.Close()
@@ -320,8 +323,10 @@ func (rds *DataStructure) ZRank(key, member []byte, rev bool) (int, error) {
 	}
 	iterOptions := bitcask.DefaultIteratorOptions
 	iterOptions.Prefix = key
+	var sign float64 = 1
 	if rev {
 		iterOptions.Reverse = true
+		sign = -1
 	}
 	iter := rds.db.NewIterator(iterOptions)
 	defer iter.Close()
@@ -337,7 +342,7 @@ func (rds *DataStructure) ZRank(key, member []byte, rev bool) (int, error) {
 		}
 		curScoreBytes, curMember := decodeZSetInternalKey(key, item.Key)
 		curScore := utils.DecodeFloat64FromBTree(curScoreBytes)
-		if curScore < score {
+		if sign*curScore < sign*score {
 			rank++
 		} else if curScore == score {
 			if bytes.Equal(curMember, member) {

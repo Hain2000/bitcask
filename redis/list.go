@@ -41,6 +41,7 @@ func (rds *DataStructure) pushInner(key, element []byte, isLeft bool) (uint32, e
 	if err != nil {
 		return 0, err
 	}
+	oldSize := meta.size
 	lk := &listInternalKey{
 		key: key,
 	}
@@ -59,11 +60,11 @@ func (rds *DataStructure) pushInner(key, element []byte, isLeft bool) (uint32, e
 	}
 	if err = wb.Put(key, meta.encode()); err != nil {
 		_ = wb.Rollback()
-		return meta.size, err
+		return oldSize, err
 	}
 	if err = wb.Put(lk.encode(), element); err != nil {
 		_ = wb.Rollback()
-		return meta.size, err
+		return oldSize, err
 	}
 	if err = wb.Commit(); err != nil {
 		return 0, err
@@ -240,7 +241,7 @@ func (rds *DataStructure) bPopInner(key []byte, ttl time.Duration, isLeft bool) 
 	return nil, nil
 }
 
-func (rds *DataStructure) LRPop(key []byte, ttl time.Duration) ([]byte, error) {
+func (rds *DataStructure) BLPop(key []byte, ttl time.Duration) ([]byte, error) {
 	return rds.bPopInner(key, ttl, true)
 }
 

@@ -2,7 +2,7 @@
 - [ ] redis
   - [x] concurrency
   - [x] server
-  - [ ] server handler
+  - [x] server handler
 - [ ] cluster
   - [ ] raft
     - [ ] fsm

@@ -94,11 +94,11 @@ func TestRedisDataStructure_ZRange(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, uint32(len(test_data)), n)
 
-	s, err := rds.ZRange([]byte("lcy"), 0, 2, false)
+	s, err := rds.ZRange([]byte("lcy"), 0, 2, false, false)
 	assert.Nil(t, err)
 	t.Log(s)
 
-	s, err = rds.ZRange([]byte("lcy"), 0, -1, true)
+	s, err = rds.ZRange([]byte("lcy"), 0, -1, false, true)
 	assert.Nil(t, err)
 	t.Log(s)
 }
@@ -178,7 +178,7 @@ func TestRedisDataStructure_ZRank(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, uint32(len(test_data)), n)
 
-	s, err := rds.ZRange([]byte("lcy"), 0, -1, true)
+	s, err := rds.ZRange([]byte("lcy"), 0, -1, false, true)
 	assert.Nil(t, err)
 	t.Log(s)
 
@@ -192,8 +192,8 @@ func TestRedisDataStructure_ZRank(t *testing.T) {
 	t.Log(rank)
 	assert.Equal(t, 7, rank)
 
-	rank, err = rds.ZRank([]byte("lcy"), []byte("aab"), true)
+	rank, err = rds.ZRank([]byte("lcy"), []byte("dd"), true)
 	assert.Nil(t, err)
 	t.Log(rank)
-	assert.Equal(t, 0, rank)
+	assert.Equal(t, 1, rank)
 }

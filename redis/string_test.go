@@ -80,16 +80,16 @@ func TestString_SetNx(t *testing.T) {
 
 	err = rds.Set([]byte("lcy"), []byte("qwq"), 0)
 	assert.Nil(t, err)
-	err = rds.SetNX([]byte("lcy"), []byte("yyds"))
+	_, err = rds.SetNX([]byte("lcy"), []byte("yyds"))
 	assert.Nil(t, err)
 
 	val, err := rds.Get([]byte("lcy"))
 	assert.Nil(t, err)
 	assert.Equal(t, "qwq", string(val))
 
-	err = rds.SetNX([]byte("chunyu"), []byte("yyds"))
+	_, err = rds.SetNX([]byte("chunyu"), []byte("yyds"))
 	assert.Nil(t, err)
-	err = rds.SetNX([]byte("chunyu"), []byte("114514"))
+	_, err = rds.SetNX([]byte("chunyu"), []byte("114514"))
 	assert.Nil(t, err)
 	val, err = rds.Get([]byte("chunyu"))
 	assert.Nil(t, err)
