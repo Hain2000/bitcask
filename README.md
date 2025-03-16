@@ -7,6 +7,6 @@
   - [x] raft
     - [x] fsm
     - [x] node
-    - [x] http server
-    - [x] grpc server
-	- [ ] docker-compose
+  - [x] http server
+  - [x] grpc server
+  - [ ] docker-compose
