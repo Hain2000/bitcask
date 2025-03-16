@@ -18,6 +18,8 @@ require (
 	github.com/tidwall/redcon v1.6.2
 	github.com/valyala/bytebufferpool v1.0.0
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
+	google.golang.org/grpc v1.56.3
+	google.golang.org/protobuf v1.36.5
 )
 
 require (
@@ -67,7 +69,7 @@ require (
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
-	google.golang.org/protobuf v1.36.5 // indirect
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
 )
 
 require (
