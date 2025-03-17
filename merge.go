@@ -1,11 +1,11 @@
 package bitcask
 
 import (
-	"bitcask/data"
-	"bitcask/index"
-	"bitcask/wal"
 	"encoding/binary"
 	"fmt"
+	"github.com/Hain2000/bitcask/data"
+	"github.com/Hain2000/bitcask/index"
+	"github.com/Hain2000/bitcask/wal"
 	"github.com/valyala/bytebufferpool"
 	"io"
 	"math"

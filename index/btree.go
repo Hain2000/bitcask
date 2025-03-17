@@ -1,8 +1,8 @@
 package index
 
 import (
-	"bitcask/wal"
 	"bytes"
+	"github.com/Hain2000/bitcask/wal"
 	"github.com/google/btree"
 	"sync"
 )

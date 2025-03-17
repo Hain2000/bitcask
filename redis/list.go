@@ -1,10 +1,10 @@
 package redis
 
 import (
-	"bitcask"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Hain2000/bitcask"
 	"golang.org/x/exp/rand"
 	"sync"
 	"time"

@@ -1,8 +1,8 @@
 package bitcask
 
 import (
-	"bitcask/utils"
 	"errors"
+	"github.com/Hain2000/bitcask/utils"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"

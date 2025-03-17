@@ -1,7 +1,7 @@
 package index
 
 import (
-	"bitcask/wal"
+	"github.com/Hain2000/bitcask/wal"
 )
 
 type Indexer interface {

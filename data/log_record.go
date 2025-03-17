@@ -1,8 +1,8 @@
 package data
 
 import (
-	"bitcask/wal"
 	"encoding/binary"
+	"github.com/Hain2000/bitcask/wal"
 	"github.com/valyala/bytebufferpool"
 )
 

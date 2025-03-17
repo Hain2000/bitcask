@@ -1,13 +1,13 @@
 package bitcask
 
 import (
-	"bitcask/data"
-	"bitcask/index"
-	"bitcask/utils"
-	"bitcask/wal"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Hain2000/bitcask/data"
+	"github.com/Hain2000/bitcask/index"
+	"github.com/Hain2000/bitcask/utils"
+	"github.com/Hain2000/bitcask/wal"
 	"github.com/bwmarrin/snowflake"
 	"github.com/gofrs/flock"
 	"github.com/robfig/cron/v3"

@@ -1,10 +1,10 @@
 package bitcask
 
 import (
-	"bitcask/data"
-	"bitcask/utils"
 	"bytes"
 	"fmt"
+	"github.com/Hain2000/bitcask/data"
+	"github.com/Hain2000/bitcask/utils"
 	"github.com/bwmarrin/snowflake"
 	"github.com/valyala/bytebufferpool"
 	"sync"

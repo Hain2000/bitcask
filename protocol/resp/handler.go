@@ -1,10 +1,10 @@
 package resp
 
 import (
-	"bitcask"
-	bitcaskredis "bitcask/redis"
 	"errors"
 	"fmt"
+	"github.com/Hain2000/bitcask"
+	bitcaskredis "github.com/Hain2000/bitcask/redis"
 	"github.com/tidwall/redcon"
 	"math"
 	"strconv"

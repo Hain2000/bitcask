@@ -1,10 +1,10 @@
 package cluster
 
 import (
-	"bitcask"
 	"bytes"
 	"encoding/gob"
 	"errors"
+	"github.com/Hain2000/bitcask"
 	"github.com/hashicorp/raft"
 	"io"
 )

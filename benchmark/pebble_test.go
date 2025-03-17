@@ -1,7 +1,7 @@
 package benchmark
 
 import (
-	"bitcask/utils"
+	"github.com/Hain2000/bitcask/utils"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/exp/rand"

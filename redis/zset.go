@@ -1,11 +1,11 @@
 package redis
 
 import (
-	"bitcask"
-	"bitcask/utils"
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"github.com/Hain2000/bitcask"
+	"github.com/Hain2000/bitcask/utils"
 	"math"
 )
 

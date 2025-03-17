@@ -1,10 +1,10 @@
 package wal
 
 import (
-	"bitcask/utils"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Hain2000/bitcask/utils"
 	"github.com/valyala/bytebufferpool"
 	"hash/crc32"
 	"io"

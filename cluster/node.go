@@ -1,8 +1,8 @@
 package cluster
 
 import (
-	"bitcask"
 	"fmt"
+	"github.com/Hain2000/bitcask"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"net"

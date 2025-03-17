@@ -1,9 +1,9 @@
 package redis
 
 import (
-	"bitcask"
 	"encoding/binary"
 	"errors"
+	"github.com/Hain2000/bitcask"
 	"hash/crc32"
 )
 

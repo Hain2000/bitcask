@@ -1,13 +1,13 @@
 package http
 
 import (
-	"bitcask"
-	"bitcask/cluster"
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Hain2000/bitcask"
+	"github.com/Hain2000/bitcask/cluster"
 	"github.com/hashicorp/raft"
 	"log"
 	"net/http"

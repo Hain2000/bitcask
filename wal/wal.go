@@ -1,9 +1,9 @@
 package wal
 
 import (
-	"bitcask/utils"
 	"errors"
 	"fmt"
+	"github.com/Hain2000/bitcask/utils"
 	"io"
 	"os"
 	"sort"

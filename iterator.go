@@ -1,9 +1,9 @@
 package bitcask
 
 import (
-	"bitcask/data"
-	"bitcask/index"
 	"bytes"
+	"github.com/Hain2000/bitcask/data"
+	"github.com/Hain2000/bitcask/index"
 	"log"
 )
 

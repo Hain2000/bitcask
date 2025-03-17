@@ -1,9 +1,9 @@
 package redis
 
 import (
-	"bitcask"
 	"errors"
 	"fmt"
+	"github.com/Hain2000/bitcask"
 	"strconv"
 	"strings"
 	"time"

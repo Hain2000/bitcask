@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bitcask"
-	"bitcask/cluster"
-	"bitcask/protocol/grpc"
 	"context"
 	"flag"
+	"github.com/Hain2000/bitcask"
+	"github.com/Hain2000/bitcask/cluster"
+	"github.com/Hain2000/bitcask/protocol/grpc"
 	"log"
 	"os"
 	"os/signal"

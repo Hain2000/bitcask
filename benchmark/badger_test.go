@@ -1,7 +1,7 @@
 package benchmark
 
 import (
-	"bitcask/utils"
+	"github.com/Hain2000/bitcask/utils"
 	"github.com/dgraph-io/badger/v4"
 	"math/rand"
 	"os"

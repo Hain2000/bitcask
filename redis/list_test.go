@@ -1,8 +1,8 @@
 package redis
 
 import (
-	"bitcask"
-	"bitcask/utils"
+	"github.com/Hain2000/bitcask"
+	"github.com/Hain2000/bitcask/utils"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"strconv"

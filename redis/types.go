@@ -1,8 +1,8 @@
 package redis
 
 import (
-	"bitcask"
 	"errors"
+	"github.com/Hain2000/bitcask"
 	"sync"
 )
 

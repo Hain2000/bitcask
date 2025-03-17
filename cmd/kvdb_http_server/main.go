@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bitcask"
-	"bitcask/cluster"
-	"bitcask/protocol/http"
 	"flag"
+	"github.com/Hain2000/bitcask"
+	"github.com/Hain2000/bitcask/cluster"
+	"github.com/Hain2000/bitcask/protocol/http"
 	"log"
 )
 

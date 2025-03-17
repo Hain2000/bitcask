@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bitcask"
-	"bitcask/redis"
 	"encoding/binary"
 	"fmt"
+	"github.com/Hain2000/bitcask"
+	"github.com/Hain2000/bitcask/redis"
 	"hash/crc32"
 	"os"
 )

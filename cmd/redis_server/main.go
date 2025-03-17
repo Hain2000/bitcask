@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bitcask"
-	"bitcask/protocol/resp"
-	bitcaskredis "bitcask/redis"
+	"github.com/Hain2000/bitcask"
+	"github.com/Hain2000/bitcask/protocol/resp"
+	bitcaskredis "github.com/Hain2000/bitcask/redis"
 	"log"
 )
 

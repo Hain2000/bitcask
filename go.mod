@@ -1,4 +1,4 @@
-module bitcask
+module github.com/Hain2000/bitcask
 
 go 1.23
 

@@ -1,7 +1,7 @@
 package resp
 
 import (
-	"bitcask/redis"
+	"github.com/Hain2000/bitcask/redis"
 	"github.com/tidwall/redcon"
 )
 

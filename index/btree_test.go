@@ -1,9 +1,9 @@
 package index
 
 import (
-	"bitcask/wal"
 	"bytes"
 	"fmt"
+	"github.com/Hain2000/bitcask/wal"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
