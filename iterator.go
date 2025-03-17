@@ -5,6 +5,7 @@ import (
 	"github.com/Hain2000/bitcask/data"
 	"github.com/Hain2000/bitcask/index"
 	"log"
+	"time"
 )
 
 // Iterator 面向用户的迭代器
@@ -131,7 +132,8 @@ func (it *Iterator) skipToNext() *data.LogRecord {
 		}
 
 		record := data.DecodeLogRecord(chunk)
-		if record.Type == data.LogRecordDeleted {
+		now := time.Now().UnixNano()
+		if record.Type == data.LogRecordDeleted || record.IsExpired(now) {
 			it.indexIter.Next()
 			continue
 		}
