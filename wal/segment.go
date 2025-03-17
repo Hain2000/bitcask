@@ -267,13 +267,13 @@ func (seg *segment) writeAll(data [][]byte) (positions []*ChunkPosition, err err
 }
 
 func (seg *segment) writeChunkBuffer(buf *bytebufferpool.ByteBuffer) error {
-	if seg.currentBlockNumber > blockSize {
+	if seg.currentBlockSize > blockSize {
 		return errors.New("the current block size exceeds the maximum block size")
 	}
 	if _, err := seg.fd.Write(buf.Bytes()); err != nil {
 		return err
 	}
-	seg.startupBlock.blockNumber--
+	seg.startupBlock.blockNumber = -1
 	return nil
 }
 
