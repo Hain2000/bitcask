@@ -77,7 +77,7 @@ func test1() {
 	n, err := rds.ZCard([]byte("lcy"))
 	fmt.Println(n)
 
-	s, err := rds.ZRange([]byte("lcy"), 0, -1, true)
+	s, err := rds.ZRange([]byte("lcy"), 0, -1, true, true)
 	if err != nil {
 		panic(err)
 	}

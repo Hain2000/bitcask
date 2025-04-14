@@ -2,7 +2,7 @@ package redis
 
 import (
 	"errors"
-	"github.com/Hain2000/bitcask"
+	bitcask2 "github.com/Hain2000/bitcask"
 	"sync"
 )
 
@@ -42,13 +42,13 @@ func (krwl *keyRWLock) lock(key []byte) func() {
 
 // DataStructure Redis数据结构服务
 type DataStructure struct {
-	db         *bitcask.DB
+	db         *bitcask2.DB
 	listLock   sync.Mutex
 	keyRWLocks keyRWLock
 }
 
-func NewRedisDataStructure(options bitcask.Options) (*DataStructure, error) {
-	db, err := bitcask.Open(options)
+func NewRedisDataStructure(options bitcask2.Options) (*DataStructure, error) {
+	db, err := bitcask2.Open(options)
 	if err != nil {
 		return nil, err
 	}
@@ -57,12 +57,12 @@ func NewRedisDataStructure(options bitcask.Options) (*DataStructure, error) {
 
 func (rds *DataStructure) findMetaData(key []byte, dataType redisType) (*metadata, error) {
 	metaBuf, err := rds.db.Get(key)
-	if err != nil && !errors.Is(err, bitcask.ErrKeyNotFound) {
+	if err != nil && !errors.Is(err, bitcask2.ErrKeyNotFound) {
 		return nil, err
 	}
 
 	var meta *metadata
-	if errors.Is(err, bitcask.ErrKeyNotFound) {
+	if errors.Is(err, bitcask2.ErrKeyNotFound) {
 		meta = &metadata{
 			dataType: dataType,
 			size:     0,

@@ -1,7 +1,7 @@
 package redis
 
 import (
-	"github.com/Hain2000/bitcask"
+	bitcask2 "github.com/Hain2000/bitcask"
 	"github.com/Hain2000/bitcask/utils"
 	"github.com/stretchr/testify/assert"
 	"os"
@@ -28,7 +28,7 @@ func TestDataStructure_HashInternalKey(t *testing.T) {
 }
 
 func TestRedisDataStructure_HGet(t *testing.T) {
-	opts := bitcask.DefaultOptions
+	opts := bitcask2.DefaultOptions
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hget")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
@@ -58,11 +58,11 @@ func TestRedisDataStructure_HGet(t *testing.T) {
 	assert.Equal(t, v2, val2)
 
 	_, err = rds.HGet(utils.GetTestKey(1), []byte("field-not-exist"))
-	assert.Equal(t, bitcask.ErrKeyNotFound, err)
+	assert.Equal(t, bitcask2.ErrKeyNotFound, err)
 }
 
 func TestRedisDataStructure_HDel(t *testing.T) {
-	opts := bitcask.DefaultOptions
+	opts := bitcask2.DefaultOptions
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hdel")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
@@ -87,11 +87,11 @@ func TestRedisDataStructure_HDel(t *testing.T) {
 	assert.True(t, del2)
 
 	_, err = rds.HGet(utils.GetTestKey(1), []byte("field1"))
-	assert.Equal(t, bitcask.ErrKeyNotFound, err)
+	assert.Equal(t, bitcask2.ErrKeyNotFound, err)
 }
 
 func TestRedisDataStructure_HMSetGet(t *testing.T) {
-	opts := bitcask.DefaultOptions
+	opts := bitcask2.DefaultOptions
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hmsetget")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
@@ -131,7 +131,7 @@ func TestRedisDataStructure_HMSetGet(t *testing.T) {
 }
 
 func TestRedisDataStructure_HExist(t *testing.T) {
-	opts := bitcask.DefaultOptions
+	opts := bitcask2.DefaultOptions
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hmsetget")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
@@ -152,7 +152,7 @@ func TestRedisDataStructure_HExist(t *testing.T) {
 }
 
 func TestRedisDataStructure_HKeysVals(t *testing.T) {
-	opts := bitcask.DefaultOptions
+	opts := bitcask2.DefaultOptions
 	dir, _ := os.MkdirTemp("", "bitcask-redis-kvs")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
@@ -193,7 +193,7 @@ func TestRedisDataStructure_HKeysVals(t *testing.T) {
 }
 
 func TestRedisDataStructure_HIncrBy(t *testing.T) {
-	opts := bitcask.DefaultOptions
+	opts := bitcask2.DefaultOptions
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hincr")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)
@@ -208,7 +208,7 @@ func TestRedisDataStructure_HIncrBy(t *testing.T) {
 }
 
 func TestRedisDataStructure_HSetNX(t *testing.T) {
-	opts := bitcask.DefaultOptions
+	opts := bitcask2.DefaultOptions
 	dir, _ := os.MkdirTemp("", "bitcask-redis-hsetnx")
 	opts.DirPath = dir
 	rds, err := NewRedisDataStructure(opts)

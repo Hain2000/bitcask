@@ -24,6 +24,7 @@ func (s *Server) Start(addr string) error {
 		},
 		func(conn redcon.Conn, err error) {
 			// 连接关闭处理
+			_ = conn.Close()
 		},
 	)
 }

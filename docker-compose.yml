@@ -1,0 +1,77 @@
+version: '3.8' # 使用较新的 compose 文件版本
+
+services:
+    kvdb-node1:
+        build:
+            context: . # Dockerfile 在当前目录
+        container_name: kvdb-node1
+        hostname: kvdb-node1
+        ports:
+            - "50051:50051" # 暴露 gRPC 端口到主机
+            - "8081:8081"
+        volumes:
+            - kvdb-data1:/data # 将命名卷挂载到容器内的 /data 目录
+        command: # 覆盖 Dockerfile 的 ENTRYPOINT 的参数
+            - "--node-id=node1"
+            - "--raft-addr=kvdb-node1:7000" # 使用服务名进行内部 Raft 通信
+            - "--grpc-port=50051" # 容器内监听的 gRPC 端口
+            - "--http-port=8081"
+            - "--raft-dir=/data" # Raft 数据目录，对应挂载的 volume
+            - "--bootstrap" # 第一个节点需要 bootstrap
+        networks:
+            - kvdb-net # 将服务连接到自定义网络
+
+    kvdb-node2:
+        build:
+            context: .
+        container_name: kvdb-node2
+        hostname: kvdb-node2
+        ports:
+            - "50052:50052" # 注意主机端口不同
+            - "8082:8082"
+        volumes:
+            - kvdb-data2:/data
+        depends_on: # 可选，稍微延迟启动，等待 node1 可能的初始化
+            - kvdb-node1
+        command:
+            - "--node-id=node2"
+            - "--raft-addr=kvdb-node2:7001" # 内部 Raft 地址和端口
+            - "--grpc-port=50052" # 内部 gRPC 端口
+            - "--http-port=8082"
+            - "--raft-dir=/data"
+            - "--join-addr=kvdb-node1:7000" # 加入 node1 的 Raft 地址
+        networks:
+            - kvdb-net
+
+    kvdb-node3:
+        build:
+            context: .
+        container_name: kvdb-node3
+        hostname: kvdb-node3
+        ports:
+            - "50053:50053" # 注意主机端口不同
+            - "8083:8083"
+        volumes:
+            - kvdb-data3:/data
+        depends_on: # 可选
+            - kvdb-node1
+        command:
+            - "--node-id=node3"
+            - "--raft-addr=kvdb-node3:7002" # 内部 Raft 地址和端口
+            - "--grpc-port=50053" # 内部 gRPC 端口
+            - "--http-port=8083"
+            - "--raft-dir=/data"
+            - "--join-addr=kvdb-node1:7000" # 加入 node1 的 Raft 地址
+        networks:
+            - kvdb-net
+
+# 定义网络
+networks:
+    kvdb-net:
+        driver: bridge # 使用默认的 bridge 网络驱动
+
+# 定义命名数据卷，用于持久化 Raft 数据
+volumes:
+    kvdb-data1:
+    kvdb-data2:
+    kvdb-data3:

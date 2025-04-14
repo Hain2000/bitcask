@@ -2,7 +2,9 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/Hain2000/bitcask/cluster"
+	"log"
 	"net/http"
 	"time"
 )
@@ -28,14 +30,24 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/cluster/join", s.handleJoin)
 	mux.HandleFunc("/cluster/status", s.handleStatus)
 
+	listenAddr := ":" + s.port
+
 	server := &http.Server{
-		Addr:         "0.0.0.0:8080",
+		Addr:         listenAddr,
 		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
+	log.Printf("[HTTP Server] Attempting to listen on address: %s", listenAddr)
+	err := server.ListenAndServe()
 
-	return server.ListenAndServe()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Printf("[HTTP Server] ListenAndServe returned error: %v", err)
+	} else if errors.Is(err, http.ErrServerClosed) {
+		log.Println("[HTTP Server] ListenAndServe closed normally.")
+	}
+
+	return err
 }
 
 // 公共响应格式
