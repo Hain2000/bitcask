@@ -1,96 +1,85 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"github.com/Hain2000/bitcask"
-	"github.com/Hain2000/bitcask/redis"
-	"hash/crc32"
+	"github.com/Hain2000/bitcask/utils"
+	"log"
 	"os"
+	"time"
 )
 
-func destroyDB(db *bitcask.DB) {
-	_ = db.Close()
-	_ = os.RemoveAll("./test_tmp")
-}
-
-type hashInternalKey struct {
-	key   []byte
-	filed []byte
-}
-
-func (hk *hashInternalKey) encode() []byte {
-	buf := make([]byte, len(hk.key)+len(hk.filed)+4)
-	var index = 0
-	copy(buf[index:index+len(hk.key)], hk.key)
-	index += len(hk.key)
-	size := make([]byte, 4)
-	crcSum := crc32.ChecksumIEEE(hk.filed)
-	binary.LittleEndian.PutUint32(size, crcSum)
-	copy(buf[index:index+4], size)
-	index += 4
-	copy(buf[index:], hk.filed)
-	return buf
-}
-
-func decodeFiled(buf, key []byte) []byte {
-	filed := make([]byte, len(buf)-len(key)-4)
-	copy(filed, buf[len(key)+4:])
-	crcSum := binary.LittleEndian.Uint32(buf[len(key) : len(key)+4])
-	if crc32.ChecksumIEEE(filed) != crcSum {
-		return nil
-	}
-	return filed
-}
-
-func closeDB(rds *redis.DataStructure, dir string) {
-	_ = rds.Close()
-	_ = os.RemoveAll(dir)
-}
-
-func test1() {
-	options := bitcask.DefaultOptions
-	options.DirPath = "./test_tmp"
-	rds, err := redis.NewRedisDataStructure(options)
-	if err != nil {
-		panic(err)
-	}
-	defer closeDB(rds, options.DirPath)
-	test_data := map[string]float64{
-		"aa":  3,
-		"bb":  2,
-		"cc":  7,
-		"dd":  8,
-		"ee":  1,
-		"ff":  10,
-		"aaa": 4,
-		"aab": 3,
-	}
-
-	for k, v := range test_data {
-		_, err := rds.ZAdd([]byte("lcy"), v, []byte(k))
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	n, err := rds.ZCard([]byte("lcy"))
-	fmt.Println(n)
-
-	s, err := rds.ZRange([]byte("lcy"), 0, -1, true, true)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(s)
-}
-
 func main() {
-	test1()
-	//val := -123.456
-	//bytes := utils.Float64ToBytes(val)
-	//fmt.Println("Encoded bytes:", bytes) // 打印字节数组
-	//fmt.Println(len(bytes))
-	//decoded := utils.BytesToFloat64(bytes)
-	//fmt.Println("Decoded float64:", decoded) // 输出应为 -123.456
+	options := bitcask.DefaultOptions
+	options.DirPath = "/tmp/test_tmp"
 
+	defer func() {
+		_ = os.RemoveAll(options.DirPath)
+	}()
+
+	db, err := bitcask.Open(options)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+
+	err = db.Put([]byte("k1"), []byte("v1"))
+	if err != nil {
+		panic(err)
+	}
+
+	val, err := db.Get([]byte("k1"))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(val))
+
+	err = db.Delete([]byte("k1"))
+	if err != nil {
+		panic(err)
+	}
+
+	batch := db.NewBatch(bitcask.DefaultBatchOptions)
+	_ = batch.Put([]byte("k2"), []byte("v2"))
+	val, _ = batch.Get([]byte("k2"))
+	fmt.Println(string(val))
+	_ = batch.Delete([]byte("k2"))
+	_ = batch.Commit()
+	// if you want to cancel batch, you must call rollback().
+	// _= batch.Rollback()
+
+	err = db.PutWithTTL([]byte("k3"), []byte("v3"), time.Second*5)
+	if err != nil {
+		panic(err)
+	}
+	ttl, err := db.TTL([]byte("k3"))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(ttl.String())
+
+	_ = db.Put([]byte("k4"), []byte("v4"))
+	err = db.Expire([]byte("k4"), time.Second*2)
+	if err != nil {
+		panic(err)
+	}
+	ttl, err = db.TTL([]byte("k4"))
+	if err != nil {
+		log.Println(err)
+	}
+	fmt.Println(ttl.String())
+
+	for i := 0; i < 100000; i++ {
+		_ = db.Put([]byte(utils.GetTestKey(i)), utils.RandomValue(128))
+	}
+	// delete some data
+	for i := 0; i < 100000/2; i++ {
+		_ = db.Delete([]byte(utils.GetTestKey(i)))
+	}
+
+	fmt.Println(db.Stat().DiskSize)
+	_ = db.Merge(true)
+	fmt.Println(db.Stat().DiskSize)
 }
