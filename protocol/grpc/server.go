@@ -11,6 +11,7 @@ import (
 	"github.com/Hain2000/bitcask/protocol/grpc/kvdb"
 	"github.com/hashicorp/raft"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	"log"
 	"net"
@@ -37,7 +38,7 @@ func (s *Server) Start(port string) error {
 
 	grpcServer := grpc.NewServer()
 	kvdb.RegisterKVServiceServer(grpcServer, s)
-
+	reflection.Register(grpcServer)
 	log.Printf("gRPC server listening on :%s", port)
 	return grpcServer.Serve(lis)
 }
@@ -88,7 +89,6 @@ func (s *Server) Get(ctx context.Context, req *kvdb.GetRequest) (*kvdb.GetRespon
 	if err := s.verifyLeader(); err != nil {
 		return nil, status.Error(codes.Unavailable, err.Error())
 	}
-
 	// 从本地状态机读取
 	value, err := s.node.Store.Get(req.Key)
 	switch {

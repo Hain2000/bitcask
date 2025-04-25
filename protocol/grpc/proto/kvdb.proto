@@ -1,6 +1,6 @@
 syntax = "proto3";
-package grpc;
-option go_package = "./kvdb";
+package kvdb;
+option go_package = "github.com/Hain2000/bitcask/protocol/grpc/kvdb";
 service KVService {
 	// 基本键值操作
 	rpc Put(PutRequest) returns (PutResponse);

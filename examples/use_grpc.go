@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/Hain2000/bitcask/protocol/grpc/kvdb"
+	kvdb "github.com/Hain2000/bitcask/protocol/grpc/kvdb"
 	"log"
 
 	"google.golang.org/grpc"
@@ -18,11 +18,13 @@ func main() {
 
 	client := kvdb.NewKVServiceClient(conn)
 
-	client.Put(context.Background(), &kvdb.PutRequest{
+	_, err = client.Put(context.Background(), &kvdb.PutRequest{
 		Key:   []byte("name1"),
 		Value: []byte("lcy"),
 	})
-
+	if err != nil {
+		panic(err)
+	}
 	client.Put(context.Background(), &kvdb.PutRequest{
 		Key:   []byte("name2"),
 		Value: []byte("qwq"),
@@ -32,13 +34,17 @@ func main() {
 		Key:   []byte("name3"),
 		Value: []byte("aqa"),
 	})
-	resp, err := client.Get(context.Background(), &kvdb.GetRequest{
+	client.Put(context.Background(), &kvdb.PutRequest{
+		Key:   []byte("lida"),
+		Value: []byte("yyds"),
+	})
+	resp2, err := client.Get(context.Background(), &kvdb.GetRequest{
 		Key: []byte("name1"),
 	})
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(resp.Found, string(resp.Value))
+	fmt.Println(resp2.Found, string(resp2.Value))
 
 	_, err = client.Delete(context.Background(), &kvdb.DeleteRequest{
 		Key: []byte("name1"),
@@ -47,11 +53,11 @@ func main() {
 		panic(err)
 	}
 
-	resp, err = client.Get(context.Background(), &kvdb.GetRequest{
+	resp2, err = client.Get(context.Background(), &kvdb.GetRequest{
 		Key: []byte("name1"),
 	})
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(resp.Found)
+	fmt.Println(resp2.Found)
 }
